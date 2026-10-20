@@ -1,0 +1,15 @@
+[project]
+name = "qingchuan-domain"
+version = "0.1.0"
+description = "晴川共享领域包：实体 / Schema / 检索协议 / 端口（单一事实来源）"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qingchuan_domain"]

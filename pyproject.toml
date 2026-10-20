@@ -1,0 +1,24 @@
+[project]
+name = "x-qingchuan"
+version = "0.1.0"
+description = "晴川（x-QingChuan）：人社 API 离线索引 + RAG 检索 + Agent 智能问答（HTTP + MCP 双服务）"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+# 中文文档/注释使用全角标点属正常书写，忽略歧义字符规则
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402", "F401"]
+# FastAPI 依赖注入惯用法：Depends(...) 出现在参数默认值中属于标准写法
+"**/api/**" = ["B008"]

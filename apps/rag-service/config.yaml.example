@@ -1,0 +1,152 @@
+# x-JinShan 配置文件模板
+# 将此文件复制为 config.yaml 并填入你的配置值
+
+# ====================================
+# 服务配置
+# ====================================
+server:
+  host: 0.0.0.0
+  port: 8010
+  debug: true
+  workers: 4
+  environment: development
+
+# ====================================
+# 日志配置
+# ====================================
+logging:
+  level: INFO
+  file_path: ./logs/x-JinShan-{time:YYYYMMDDHHmmss}.log
+  rotation: 1 day
+  retention: 7 days
+
+# ====================================
+# 业务数据库配置（审计日志 / 同步任务状态，MySQL；本地可 SQLite）
+# ====================================
+database:
+  # 默认 MySQL（生产）；本地开发可切回 sqlite:///./data/jinshan.db
+  # 注意：数据库需提前创建（如 CREATE DATABASE jinshan CHARACTER SET utf8mb4）
+  db_url: "mysql+pymysql://yeyushilai:123456@localhost:3306/jinshan?charset=utf8mb4"
+
+# ====================================
+# 人社数据同步配置（触发接口 + 周期调度）
+# ====================================
+sync:
+  enabled: false              # true=启动内置 APScheduler 周期调度
+  cron: "0 3 * * *"           # 周期表达式（默认每天 03:00）
+  batch_size: 100             # 每批拉取条数
+  incremental: true           # 默认增量同步
+  # 人社数据源（生产必填；接口层在 jinshan_rag/infras/hrss.py）
+  data_source_url: ""         # HRSS_API_URL
+  data_source_token: ""       # HRSS_API_TOKEN（Bearer 认证）
+  data_source_timeout: 30.0   # HRSS_API_TIMEOUT 请求超时（秒）
+  data_source_mock: true      # HRSS_MOCK：true=本地示例数据调试（默认）；false=请求真实人社 API
+  data_source_mock_count: 5   # HRSS_MOCK_COUNT：mock 示例数据条数
+
+# ====================================
+# 向量嵌入配置
+# ====================================
+embedding:
+  model: BAAI/bge-m3
+  device: cpu
+  batch_size: 32
+  cache_size: 1000
+  normalize: true
+
+# ====================================
+# 向量存储配置
+# ====================================
+vector_store:
+  type: chroma
+  persist_directory: ./data/chroma
+  collection_name: documents
+  distance: cosine
+
+# ====================================
+# 文本切分配置
+# ====================================
+text_splitter:
+  provider: langchain  # langchain | llamaindex
+  strategy: recursive  # recursive | character | token | semantic（langchain）/ sentence | token | semantic | markdown（llamaindex）
+  chunk_size: 512
+  chunk_overlap: 50
+  separators:
+    - "\n\n"
+    - "\n"
+    - "。"
+    - "！"
+    - "？"
+    - " "
+    - ""
+
+# ====================================
+# 检索配置
+# ====================================
+retrieval:
+  top_k: 5
+  similarity_threshold: 0.7
+  use_mmr: false
+  mmr_lambda: 0.5
+
+# ====================================
+# 生成配置
+# ====================================
+generation:
+  provider: mimo
+  model: mimo-v2.6-pro
+  temperature: 0.7
+  max_tokens: 2000
+  timeout: 30
+
+# ====================================
+# LLM 调用层通用默认（所有 Provider 的兜底参数）
+# ====================================
+llm:
+  max_tokens: 2000
+  timeout: 30
+
+# ====================================
+# LLM 提供商配置
+# ====================================
+llm_providers:
+  # DeepSeek
+  deepseek_api_key: your-deepseek-api-key
+  deepseek_api_base: https://api.deepseek.com/v1
+  deepseek_model_name: deepseek-chat
+  # 豆包 (字节跳动)
+  doubao_api_key: your-doubao-api-key
+  doubao_api_base: https://ark.cn-beijing.volces.com/api/v3
+  doubao_model_name: doubao-pro-32k
+  # 阿里云百炼 (通义千问)
+  aliyun_api_key: your-aliyun-api-key
+  aliyun_api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+  aliyun_model_name: qwen-plus
+  # 小米 Mimo
+  mimo_api_key: your-mimo-api-key
+  mimo_api_base: https://api.xiaomimimo.com/v1
+  mimo_model_name: mimo-v2.6-pro
+
+# ====================================
+# 限流配置
+# ====================================
+rate_limit:
+  enabled: true
+  requests_per_minute: 60
+  requests_per_hour: 1000
+
+# ====================================
+# CORS 配置
+# ====================================
+cors:
+  enabled: true
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  allow_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  allow_headers:
+    - "*"

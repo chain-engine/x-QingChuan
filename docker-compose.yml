@@ -1,0 +1,42 @@
+name: x-qingchuan
+
+services:
+  rag-service:
+    build:
+      context: .
+      dockerfile: apps/rag-service/Dockerfile
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8010
+      # 业务数据库（审计 / 同步任务状态）：生产按实际 MySQL 调整
+      # DATABASE_URL: mysql+pymysql://user:pass@mysql:3306/qingchuan?charset=utf8mb4
+      # 人社数据源与周期调度（生产必填）
+      # SYNC_ENABLED: "true"
+      # SYNC_CRON: "0 3 * * *"
+      # HRSS_API_URL: https://hrss.example.com/api
+      # HRSS_API_TOKEN: your-token
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  agent-service:
+    build:
+      context: .
+      dockerfile: apps/agent-service/Dockerfile
+    environment:
+      QINGCHUAN_AGENT_RAG_HTTP_BASE_URL: http://rag-service:8010
+      QINGCHUAN_AGENT_SERVER_HOST: 0.0.0.0
+      QINGCHUAN_AGENT_SERVER_PORT: 8020
+      # 任务/事件持久化（生产按实际 MySQL 调整）
+      # QINGCHUAN_AGENT_DATABASE_ENABLED: "true"
+      # QINGCHUAN_AGENT_DATABASE_HOST: mysql
+      # QINGCHUAN_AGENT_DATABASE_USER: root
+      # QINGCHUAN_AGENT_DATABASE_PASSWORD: your-password
+      # QINGCHUAN_AGENT_DATABASE_DATABASE: qingchuan
+    ports:
+      - "8020:8020"
+    depends_on:
+      - rag-service
+    restart: unless-stopped

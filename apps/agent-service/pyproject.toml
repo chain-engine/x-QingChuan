@@ -1,0 +1,35 @@
+[project]
+name = "qingchuan-agent"
+version = "0.1.0"
+description = "晴川 Agent 服务：LangGraph 编排 + HTTP/MCP，经 MCP 工具调用 rag-service"
+requires-python = ">=3.12"
+dependencies = [
+  "qingchuan-domain",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic-settings>=2.5",
+  # MCP 客户端封装在 packages/common（未来实现）；agent 侧当前未直接 import mcp，
+  # 版本约束与 rag-service 对齐（mcp>=2.3.0），保证 workspace 单一版本
+  "mcp>=2.3.0,<3",
+  "langgraph>=0.2",
+  "langchain-core>=0.3",
+  "langchain-openai>=0.2",
+  "loguru>=0.7",
+  # 数据访问（SQLAlchemy 2 + MySQL，任务/事件持久化）
+  "sqlalchemy>=2.0",
+  "pymysql>=1.1",
+]
+
+[tool.uv.sources]
+qingchuan-domain = { workspace = true }
+
+[project.scripts]
+qingchuan-agent = "qingchuan_agent.cli:main"
+qingchuan-agent-api = "qingchuan_agent.cli:serve"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qingchuan_agent"]

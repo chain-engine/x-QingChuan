@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 本地运行时数据（向量库 / 索引缓存 / 人社拉取快照）
+data/
