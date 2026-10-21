@@ -14,9 +14,9 @@ COPY packages/domain ./packages/domain
 COPY apps/rag-service ./apps/rag-service
 
 # 仅安装 rag-service 及其 workspace 依赖
-RUN uv sync --package jinshan-rag --no-dev --frozen
+RUN uv sync --package qingchuan-rag --no-dev --frozen
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8010
 
-CMD ["jinshan-rag-api"]
+CMD ["qingchuan-rag-api"]

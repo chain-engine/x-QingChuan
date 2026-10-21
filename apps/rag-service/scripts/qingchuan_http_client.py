@@ -21,6 +21,7 @@
     - Windows PowerShell 传参时双引号会被剥离，含引号的 JSON 请用 --body-file；
     - 同步触发接口 POST /api/v1/sync/trigger 也可用本客户端调用。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -82,7 +83,9 @@ class QingChuanHTTPClient:
                 print(f"请求体      : {body_display}")
 
         try:
-            resp = requests.request(method, url, headers=headers, data=payload or None, timeout=self.timeout)
+            resp = requests.request(
+                method, url, headers=headers, data=payload or None, timeout=self.timeout
+            )
         except requests.RequestException as exc:
             raise RuntimeError(f"请求异常：{exc}") from exc
 
@@ -94,7 +97,9 @@ class QingChuanHTTPClient:
             result = {"raw": resp.text[:2000]}
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if resp.status_code >= 400:
-            raise RuntimeError(f"接口返回 HTTP {resp.status_code}：{json.dumps(result, ensure_ascii=False)[:300]}")
+            raise RuntimeError(
+                f"接口返回 HTTP {resp.status_code}：{json.dumps(result, ensure_ascii=False)[:300]}"
+            )
         return result
 
     # ── 便捷方法（按接口语义封装） ─────────────────────────────────
@@ -130,9 +135,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "  python scripts/qingchuan_http_client.py --url http://127.0.0.1:8010/api/v1/rag/query "
         "--method POST --body-file body.json",
     )
-    parser.add_argument("--url", required=True, help="完整请求 URL，如 http://127.0.0.1:8010/api/v1/rag/query")
-    parser.add_argument("--method", default="GET", help="HTTP 方法（GET/POST/PUT/DELETE），默认 GET")
-    parser.add_argument("--body", default=None, help='请求体 JSON 字符串（POST/PUT 时传入，如 \'{"query":"xxx"}\'）')
+    parser.add_argument(
+        "--url", required=True, help="完整请求 URL，如 http://127.0.0.1:8010/api/v1/rag/query"
+    )
+    parser.add_argument(
+        "--method", default="GET", help="HTTP 方法（GET/POST/PUT/DELETE），默认 GET"
+    )
+    parser.add_argument(
+        "--body", default=None, help='请求体 JSON 字符串（POST/PUT 时传入，如 \'{"query":"xxx"}\'）'
+    )
     parser.add_argument(
         "--body-file",
         default=None,
@@ -140,7 +151,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "含引号的 JSON 建议用 --body-file",
     )
     parser.add_argument("--quiet", action="store_true", help="关闭请求过程日志（仅打印响应）")
-    parser.add_argument("--timeout", type=int, default=90, help="请求超时秒数（默认 90，embedding 冷启动可调大）")
+    parser.add_argument(
+        "--timeout", type=int, default=90, help="请求超时秒数（默认 90，embedding 冷启动可调大）"
+    )
     return parser
 
 

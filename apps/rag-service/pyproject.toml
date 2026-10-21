@@ -41,18 +41,20 @@ dependencies = [
   "pymysql>=1.2.3",
   # 周期调度（人社数据同步）
   "apscheduler>=3.10,<4",
+  "pymilvus>=2.4.0",
+  "milvus-lite>=2.4.0",
 ]
 
 [tool.uv.sources]
 qingchuan-domain = { workspace = true }
 
-[[tool.uv.index]]
-url = "https://mirrors.aliyun.com/pypi/simple/"
-default = true
-
 [project.scripts]
 qingchuan-rag-api = "qingchuan_rag.cli:main"
 qingchuan-pipeline = "qingchuan_rag.pipeline.cli:main"
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
 
 [build-system]
 requires = ["hatchling"]

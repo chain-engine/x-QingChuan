@@ -1,4 +1,4 @@
-# Start the x-JinShan application
+# Start the x-QingChuan application
 
 $ErrorActionPreference = "Stop"
 
@@ -31,4 +31,4 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 # Run with uvicorn
-uv run uvicorn jinshan_rag.main:app --host 0.0.0.0 --port 8010 --reload
+uv run uvicorn qingchuan_rag.main:app --host 0.0.0.0 --port 8010 --reload

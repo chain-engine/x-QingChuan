@@ -117,7 +117,9 @@ class SyncService(BaseService):
         )
         try:
             self._save_task_started(result)
-            logger.info(f"[{task_id}] 人社数据同步开始：channel={channel} full={full} force={force}")
+            logger.info(
+                f"[{task_id}] 人社数据同步开始：channel={channel} full={full} force={force}"
+            )
 
             # 1. 拉取人社数据（full=True 全量；否则增量）
             records: list[dict[str, Any]] = []

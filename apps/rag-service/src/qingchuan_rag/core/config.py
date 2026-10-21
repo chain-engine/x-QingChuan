@@ -37,6 +37,9 @@ from qingchuan_rag.constants import (
     DEFAULT_TOP_K,
 )
 
+# 仓库根 .env（本地开发单一配置源；任意 CWD 启动均能加载，避免 .env 相对 CWD 失效）
+QINGCHUAN_ROOT_ENV: Final[Path] = Path(__file__).resolve().parents[5] / ".env"
+
 
 @dataclass
 class ServerConfig:
@@ -121,12 +124,20 @@ class EmbeddingConfig:
 
 @dataclass
 class VectorStoreConfig:
-    """向量存储配置"""
+    """向量存储配置
+
+    type: chroma | milvus
+        - chroma：本地持久化目录（persist_directory），开发默认
+        - milvus：本地 milvus-lite 文件（milvus_uri="./data/milvus.db"）或远程 Milvus 服务
+          （milvus_uri="http://milvus:19530"）；dimension 用于建集合（缺省时按首条向量自动推导）
+    """
 
     type: str = "chroma"
     persist_directory: str = "./data/chroma"
     collection_name: str = "documents"
     distance: str = "cosine"
+    milvus_uri: str = "./data/milvus.db"
+    dimension: int | None = None
 
 
 @dataclass
@@ -202,7 +213,7 @@ class Settings:
 
     def __init__(self) -> None:
         """初始化配置"""
-        load_dotenv()
+        load_dotenv(QINGCHUAN_ROOT_ENV)
         self._config: dict[str, Any] = self._load_config()
         self._parse_config()
 
@@ -256,6 +267,8 @@ class Settings:
                 "persist_directory": "./data/chroma",
                 "collection_name": "documents",
                 "distance": "cosine",
+                "milvus_uri": "./data/milvus.db",
+                "dimension": None,
             },
             "text_splitter": {
                 "provider": "langchain",
@@ -348,6 +361,8 @@ class Settings:
             "VECTOR_STORE_PERSIST_DIR": ("vector_store", "persist_directory", str),
             "VECTOR_STORE_COLLECTION_NAME": ("vector_store", "collection_name", str),
             "VECTOR_STORE_DISTANCE": ("vector_store", "distance", str),
+            "MILVUS_URI": ("vector_store", "milvus_uri", str),
+            "VECTOR_STORE_DIMENSION": ("vector_store", "dimension", int),
             "TEXT_SPLITTER_PROVIDER": ("text_splitter", "provider", str),
             "TEXT_SPLITTER_STRATEGY": ("text_splitter", "strategy", str),
             "TEXT_SPLITTER_CHUNK_SIZE": ("text_splitter", "chunk_size", int),
@@ -502,6 +517,14 @@ class Settings:
     @property
     def VECTOR_STORE_TYPE(self) -> str:
         return self.vector_store.type
+
+    @property
+    def VECTOR_STORE_MILVUS_URI(self) -> str:
+        return self.vector_store.milvus_uri
+
+    @property
+    def VECTOR_STORE_DIMENSION(self) -> int | None:
+        return self.vector_store.dimension
 
     @property
     def TEXT_SPLITTER_PROVIDER(self) -> str:

@@ -1,12 +1,12 @@
 """常量与枚举包（晴川 x-QingChuan，对齐北辰 constants 包形态）。
 
 子模块：
-    base      枚举基类族（BaseEnum / StrBaseEnum / IntBaseEnum / FloatBaseEnum）
+    base      枚举基类族（re-export qingchuan_domain.constants.base）
     constants 全局常量（应用信息 / API 路由）
-    enums     业务枚举（通用领域 / Agent 编排域）
+    enums     业务枚举（跨服务共享 re-export + Agent 编排域专属）
 
-说明：Agent 编排域枚举为服务内概念，暂不抽离到共享 domain 包；
-若未来双服务需共享 Environment / HttpStatusCode 等，再迁移 qingchuan_domain.constants。
+跨服务共享枚举（Environment / HttpStatus / AgentType / ToolPermissionLevel）
+单一事实来源在 packages/domain，见 qingchuan_domain.constants.enums。
 """
 
 from qingchuan_agent.constants.base import BaseEnum, FloatBaseEnum, IntBaseEnum, StrBaseEnum
@@ -23,7 +23,7 @@ from qingchuan_agent.constants.enums import (
     ApiResponseMessage,
     Environment,
     HttpHeaders,
-    HttpStatusCode,
+    HttpStatus,
     RouteMode,
     TaskStatus,
     ToolPermissionLevel,
@@ -42,7 +42,7 @@ __all__ = [
     "Environment",
     "FloatBaseEnum",
     "HttpHeaders",
-    "HttpStatusCode",
+    "HttpStatus",
     "IntBaseEnum",
     "RouteMode",
     "StrBaseEnum",

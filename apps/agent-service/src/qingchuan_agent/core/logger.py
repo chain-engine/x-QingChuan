@@ -18,6 +18,7 @@ from __future__ import annotations
 import json as _json
 import os
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger as _logger
@@ -81,6 +82,11 @@ def setup_logging(
 
     log_level: str = level or settings.logging.level
     log_file_path: str = file_path or settings.logging.file_path
+    # 相对路径基于服务根目录（src 的上级目录）解析，
+    # 保证任意 CWD 启动日志落位一致（对齐 rag-service）
+    if not os.path.isabs(log_file_path):
+        service_root = Path(__file__).parent.parent.parent.parent.resolve()
+        log_file_path = str(service_root / log_file_path)
     log_rotation: str = rotation or settings.logging.rotation
     log_retention: str = retention or settings.logging.retention
     fmt: str = (log_format or settings.logging.format).lower()
@@ -128,6 +134,10 @@ def get_log_file_path() -> str:
 
     base_path: str = settings.logging.file_path
     if base_path:
+        # 与 setup_logging 一致：相对路径基于服务根目录解析
+        if not os.path.isabs(base_path):
+            service_root = Path(__file__).parent.parent.parent.parent.resolve()
+            base_path = str(service_root / base_path)
         dir_path: str = os.path.dirname(base_path)
         ext: str = os.path.splitext(base_path)[1] or ".log"
         return os.path.join(dir_path, f"{APP_NAME}-{{time:YYYYMMDDHH}}{ext}")

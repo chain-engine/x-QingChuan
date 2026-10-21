@@ -29,21 +29,36 @@ class SyncTaskEntity(Base):
         String(64), nullable=False, unique=True, comment="同步任务唯一ID（业务标识）"
     )
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending", comment="任务状态 pending/running/success/failed"
+        String(20),
+        nullable=False,
+        default="pending",
+        comment="任务状态 pending/running/success/failed",
     )
     channel: Mapped[str] = mapped_column(
         String(20), nullable=False, default="manual", comment="触发渠道 manual/scheduler"
     )
     full: Mapped[bool] = mapped_column(default=False, comment="是否全量同步")
-    source: Mapped[str] = mapped_column(String(50), nullable=False, default="hrss", comment="数据源标识")
-    total_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="待同步记录总数")
-    synced_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="成功同步记录数")
-    failed_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="失败记录数")
+    source: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="hrss", comment="数据源标识"
+    )
+    total_records: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="待同步记录总数"
+    )
+    synced_records: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="成功同步记录数"
+    )
+    failed_records: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="失败记录数"
+    )
     message: Mapped[str | None] = mapped_column(Text, nullable=True, comment="执行说明 / 错误摘要")
     error: Mapped[str | None] = mapped_column(Text, nullable=True, comment="失败明细")
-    extra: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, comment="扩展字段（批次信息等）")
+    extra: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="扩展字段（批次信息等）"
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="开始时间")
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="结束时间")
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="结束时间"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

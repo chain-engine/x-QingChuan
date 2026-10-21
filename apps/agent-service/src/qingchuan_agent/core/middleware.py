@@ -155,9 +155,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         authorization: str | None = request.headers.get("Authorization")
         if not authorization or not authorization.strip():
-            from qingchuan_agent.core.exceptions import AuthenticationException
+            from qingchuan_agent.core.exceptions import UnauthorizedError
 
-            raise AuthenticationException("Missing Authorization header")
+            raise UnauthorizedError("Missing Authorization header")
         if self.token_validator is not None:
             token: str = (
                 authorization[7:].strip()
@@ -165,9 +165,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 else authorization
             )
             if not self.token_validator(token):
-                from qingchuan_agent.core.exceptions import AuthenticationException
+                from qingchuan_agent.core.exceptions import UnauthorizedError
 
-                raise AuthenticationException("Invalid token")
+                raise UnauthorizedError("Invalid token")
         return await call_next(request)
 
 

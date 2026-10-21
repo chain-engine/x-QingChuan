@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from qingchuan_domain.schemas.retrieval import RetrievedChunk
 from qingchuan_rag.constants import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MMR_LAMBDA,
@@ -204,43 +205,25 @@ class GenerationRequest(BaseModel):
     )
 
 
-class RetrievedDocument(BaseModel):
-    """检索到的文档"""
+RetrievedDocument = RetrievedChunk
+"""检索命中片段（领域契约别名；单一事实来源 qingchuan_domain.schemas.retrieval.RetrievedChunk）。
 
-    chunk_id: str = Field(..., description="分块ID")
-    document_id: str = Field(..., description="文档ID")
-    text: str = Field(..., description="文本内容")
-    score: float = Field(..., description="相似度分数")
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
-        description="元数据",
-    )
+保留本别名保证 rag 既有导入路径不变；HTTP 与 MCP 响应均序列化为领域契约结构。
+"""
 
-    @classmethod
-    def from_search_results(cls, results: list[dict[str, Any]]) -> list["RetrievedDocument"]:
-        """将检索服务返回的原始结果转换为模型列表（HTTP 与 MCP 层共用，避免重复组装）"""
-        return [
-            cls(
-                chunk_id=doc["id"],
-                document_id=doc["metadata"].get("document_id", ""),
-                text=doc["text"],
-                score=doc["score"],
-                metadata=doc["metadata"],
-            )
-            for doc in results
-        ]
 
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "chunk_id": "doc1_chunk_0",
-                "document_id": "doc1",
-                "text": "这是文档内容...",
-                "score": 0.95,
-                "metadata": {"source": "file.txt"},
-            }
-        },
-    )
+def from_search_results(results: list[dict[str, Any]]) -> list[RetrievedDocument]:
+    """将检索服务返回的原始结果转换为领域契约片段列表（HTTP 与 MCP 层共用）。"""
+    return [
+        RetrievedDocument(
+            chunk_id=doc["id"],
+            document_id=doc["metadata"].get("document_id", ""),
+            text=doc["text"],
+            score=doc["score"],
+            metadata=doc["metadata"],
+        )
+        for doc in results
+    ]
 
 
 class RAGQueryResponse(BaseModel):

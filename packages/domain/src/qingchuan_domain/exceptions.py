@@ -137,6 +137,17 @@ class SyncError(BusinessError):
         super().__init__(message, 400, detail)
 
 
+class AgentException(BusinessError):
+    """Agent 编排异常（400 系列，任务提交 / 路由 / 执行失败）。"""
+
+    def __init__(
+        self,
+        message: str = "Agent orchestration error",
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(message, 400, detail)
+
+
 class EmbeddingError(SystemError):
     """向量化异常"""
 
@@ -203,7 +214,19 @@ class ConfigurationError(SystemError):
         super().__init__(message, 500, detail)
 
 
+class ExternalServiceError(SystemError):
+    """外部服务异常（502，依赖服务不可用 / 上游错误）。"""
+
+    def __init__(
+        self,
+        message: str = "External service error",
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(message, 502, detail)
+
+
 __all__ = [
+    "AgentException",
     "AppException",
     "BusinessError",
     "ConfigurationError",
@@ -211,6 +234,7 @@ __all__ = [
     "DatabaseError",
     "DocumentError",
     "EmbeddingError",
+    "ExternalServiceError",
     "ForbiddenError",
     "GenerationError",
     "NotFoundError",

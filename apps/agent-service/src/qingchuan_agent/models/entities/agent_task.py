@@ -20,9 +20,7 @@ class AgentTask(Base):
 
     __tablename__ = "agent_tasks"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True, comment="主键"
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="主键")
     task_type: Mapped[str] = mapped_column(
         String(32), index=True, nullable=False, comment="任务类型（AgentType）"
     )

@@ -1,4 +1,4 @@
-# x-JinShan 配置文件模板
+# x-QingChuan 配置文件模板
 # 将此文件复制为 config.yaml 并填入你的配置值
 
 # ====================================
@@ -16,7 +16,7 @@ server:
 # ====================================
 logging:
   level: INFO
-  file_path: ./logs/x-JinShan-{time:YYYYMMDDHHmmss}.log
+  file_path: ./logs/x-QingChuan-{time:YYYYMMDDHHmmss}.log
   rotation: 1 day
   retention: 7 days
 
@@ -24,9 +24,9 @@ logging:
 # 业务数据库配置（审计日志 / 同步任务状态，MySQL；本地可 SQLite）
 # ====================================
 database:
-  # 默认 MySQL（生产）；本地开发可切回 sqlite:///./data/jinshan.db
-  # 注意：数据库需提前创建（如 CREATE DATABASE jinshan CHARACTER SET utf8mb4）
-  db_url: "mysql+pymysql://yeyushilai:123456@localhost:3306/jinshan?charset=utf8mb4"
+  # 默认 MySQL（生产）；本地开发可切回 sqlite:///./data/qingchuan.db
+  # 注意：数据库需提前创建（如 CREATE DATABASE qingchuan CHARACTER SET utf8mb4）
+  db_url: "mysql+pymysql://yeyushilai:123456@127.0.0.1:3306/qingchuan?charset=utf8mb4"
 
 # ====================================
 # 人社数据同步配置（触发接口 + 周期调度）
@@ -36,7 +36,7 @@ sync:
   cron: "0 3 * * *"           # 周期表达式（默认每天 03:00）
   batch_size: 100             # 每批拉取条数
   incremental: true           # 默认增量同步
-  # 人社数据源（生产必填；接口层在 jinshan_rag/infras/hrss.py）
+  # 人社数据源（生产必填；接口层在 qingchuan_rag/infras/hrss.py）
   data_source_url: ""         # HRSS_API_URL
   data_source_token: ""       # HRSS_API_TOKEN（Bearer 认证）
   data_source_timeout: 30.0   # HRSS_API_TIMEOUT 请求超时（秒）

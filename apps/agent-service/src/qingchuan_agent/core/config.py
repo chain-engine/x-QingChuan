@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Final
 from urllib.parse import quote_plus
 
@@ -23,6 +24,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from qingchuan_agent.constants import Environment, RouteMode
 
+# 仓库根 .env（本地开发单一配置源；任意 CWD 启动均能加载）
+QINGCHUAN_ROOT_ENV: Final[Path] = Path(__file__).resolve().parents[5] / ".env"
+
 
 class LoggingSettings(BaseSettings):
     """日志配置。"""
@@ -31,7 +35,9 @@ class LoggingSettings(BaseSettings):
 
     level: str = "INFO"
     format: str = "console"  # "json" | "console"
-    file_path: str = "logs/x-QingChuan-agent-{time:YYYYMMDDHH}.log"
+    # 与 rag-service 保持一致：相对路径由 logger 按服务根目录（src 的上级目录）解析，
+    # 任意 CWD 启动均落位 apps/agent-service/logs/，文件名 x-QingChuan-{time:YYYYMMDDHHmmss}.log
+    file_path: str = "./logs/x-QingChuan-{time:YYYYMMDDHHmmss}.log"
     rotation: str = "1 day"
     retention: str = "7 days"
     compression: str = "zip"
@@ -87,9 +93,7 @@ class DatabaseSettings(BaseSettings):
         """
         pwd = quote_plus(self.password) if self.password else ""
         auth = f"{quote_plus(self.user)}:{pwd}@" if self.user else ""
-        return (
-            f"mysql+pymysql://{auth}{self.host}:{self.port}/{quote_plus(self.database)}"
-        )
+        return f"mysql+pymysql://{auth}{self.host}:{self.port}/{quote_plus(self.database)}"
 
 
 class AiLLMSettings(BaseSettings):
@@ -131,15 +135,21 @@ class RagClientSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_RAG_", extra="ignore")
 
-    mcp_command: str = "qingchuan-rag-mcp"
+    # MCP 主链路：rag-service 以 streamable HTTP 挂载 /mcp（见 rag-service main.py），
+    # agent 经 qingchuan_common.mcp.MCPClient 连接调用 retrieve_docs / rag_query
+    mcp_url: str = "http://rag-service:8010/mcp"
+    # HTTP 兜底链路（预留：MCP 不可用时降级调 /api/v1/rag/*，当前未实现）
     http_base_url: str = "http://rag-service:8010"
+    mcp_timeout_seconds: float = 60.0
 
 
 class Settings(BaseSettings):
     """Agent 服务全局配置（分段：server / logging / cors / database / ai / agent / rag）。"""
 
     model_config = SettingsConfigDict(
-        env_prefix="QINGCHUAN_AGENT_", env_file=".env", extra="ignore"
+        env_prefix="QINGCHUAN_AGENT_",
+        env_file=str(QINGCHUAN_ROOT_ENV),
+        extra="ignore",
     )
 
     app_env: str = Environment.DEVELOPMENT.mark
@@ -160,7 +170,7 @@ class Settings(BaseSettings):
         优先级：OS 环境变量 > .env > 代码默认值。仅当 OS 环境未提供对应变量时，
         才从 .env 取数，避免覆盖部署环境注入的配置。
         """
-        values = dotenv_values(".env")
+        values = dotenv_values(QINGCHUAN_ROOT_ENV)
         if not values:
             return self
         prefix = "QINGCHUAN_AGENT_DATABASE_"
@@ -173,6 +183,24 @@ class Settings(BaseSettings):
             merged = self.database.model_dump()
             merged.update(overrides)
             self.database = DatabaseSettings(**merged)
+        return self
+
+    @model_validator(mode="after")
+    def _load_rag_from_env_file(self) -> Settings:
+        """从 .env 补齐 rag 段（嵌套模型字段不自动读取 env_file，与 database 段同因）。"""
+        values = dotenv_values(QINGCHUAN_ROOT_ENV)
+        if not values:
+            return self
+        prefix = "QINGCHUAN_AGENT_RAG_"
+        overrides: dict[str, object] = {}
+        for field in ("mcp_url", "http_base_url", "mcp_timeout_seconds"):
+            env_key = prefix + field.upper()
+            if env_key in values and env_key not in os.environ:
+                overrides[field] = values[env_key]
+        if overrides:
+            merged = self.rag.model_dump()
+            merged.update(overrides)
+            self.rag = RagClientSettings(**merged)
         return self
 
     # ----------------------------------------------------------
@@ -211,9 +239,7 @@ class Settings(BaseSettings):
         if self.is_production:
             if self.server.debug:
                 raise ValueError("生产环境禁止开启 DEBUG（QINGCHUAN_AGENT_SERVER_DEBUG=false）")
-            if self.database.enabled and (
-                not self.database.host or not self.database.database
-            ):
+            if self.database.enabled and (not self.database.host or not self.database.database):
                 raise ValueError(
                     "生产环境启用数据库时必须配置 QINGCHUAN_AGENT_DATABASE_HOST / DATABASE"
                 )

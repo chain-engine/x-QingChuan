@@ -7,7 +7,7 @@
     - write  写：不注册给 Agent，由人工 / 外部执行器执行
 
 调用约定：Agent 节点通过 tool_registry.invoke(name, **kwargs) 调用，
-只读工具直接执行；写工具抛 AuthorizationException（不降级静默）。
+只读工具直接执行；写工具抛 ForbiddenError（不降级静默）。
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from qingchuan_agent.constants import ToolPermissionLevel
-from qingchuan_agent.core.exceptions import AuthorizationException
+from qingchuan_agent.core.exceptions import ForbiddenError
 from qingchuan_agent.core.logger import logger
 
 
@@ -59,13 +59,13 @@ class ToolRegistry:
 
         Raises:
             ValueError: 工具不存在或已停用
-            AuthorizationException: 工具为写工具（WRITE），Agent 不允许直接调用
+            ForbiddenError: 工具为写工具（WRITE），Agent 不允许直接调用
         """
         spec = self.get(name)
         if spec is None or not spec.enabled:
             raise ValueError(f"工具不存在或已停用：{name}")
         if spec.permission_level != ToolPermissionLevel.READ:
-            raise AuthorizationException(
+            raise ForbiddenError(
                 f"工具 {spec.name} 为写工具（{spec.permission_level}），Agent 不允许直接调用"
             )
         logger.info(f"[Tool] invoke {name}")

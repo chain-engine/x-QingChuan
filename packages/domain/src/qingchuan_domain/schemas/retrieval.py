@@ -24,7 +24,7 @@ class RetrievalQuery(BaseModel):
         default=0.5, ge=0.0, le=1.0, description="MMR 参数，0=多样性优先，1=相关性优先"
     )
     metadata_filter: dict[str, Any] | None = Field(
-        default=None, description="元数据过滤条件，如 {\"source_type\": \"policy\"}"
+        default=None, description='元数据过滤条件，如 {"source_type": "policy"}'
     )
     scope: str | None = Field(default=None, description="检索范围标识（如参保人/政策），预留")
 

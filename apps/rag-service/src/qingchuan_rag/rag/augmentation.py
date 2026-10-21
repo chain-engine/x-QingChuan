@@ -272,7 +272,7 @@ class Augmentation:
         if not contexts:
             return query
 
-        context_text = "\n\n".join([f"[文档{i+1}]\n{ctx}" for i, ctx in enumerate(contexts)])
+        context_text = "\n\n".join([f"[文档{i + 1}]\n{ctx}" for i, ctx in enumerate(contexts)])
         return self._user_prompt_template.format(
             context=context_text,
             query=query,

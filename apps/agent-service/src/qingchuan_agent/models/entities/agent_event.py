@@ -19,9 +19,7 @@ class AgentEvent(Base):
 
     __tablename__ = "agent_events"
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True, comment="主键"
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="主键")
     event_type: Mapped[str] = mapped_column(
         String(32), index=True, nullable=False, comment="事件类型"
     )
@@ -31,9 +29,7 @@ class AgentEvent(Base):
     target_agent: Mapped[str | None] = mapped_column(
         String(32), nullable=True, comment="目标 Agent 类型"
     )
-    payload: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True, comment="事件载荷"
-    )
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="事件载荷")
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="recorded", comment="事件状态"
     )

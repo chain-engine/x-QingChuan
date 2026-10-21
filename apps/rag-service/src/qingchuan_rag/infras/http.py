@@ -43,13 +43,21 @@ class HttpProvider(ABC):
 
     @abstractmethod
     def post(
-        self, url: str, data: dict[str, Any] | None = None, json: dict[str, Any] | None = None, **kwargs: Any
+        self,
+        url: str,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """发送 POST 请求。"""
 
     @abstractmethod
     def put(
-        self, url: str, data: dict[str, Any] | None = None, json: dict[str, Any] | None = None, **kwargs: Any
+        self,
+        url: str,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """发送 PUT 请求。"""
 
@@ -141,12 +149,16 @@ class RequestsHttpProvider(HttpProvider):
                 logger.debug(f"HTTP {method} response: {full_url}, status: {response.status_code}")
                 return response
             except requests.RequestException as e:
-                logger.warning(f"HTTP {method} request failed: {full_url}, attempt: {attempt + 1}, error: {e}")
+                logger.warning(
+                    f"HTTP {method} request failed: {full_url}, attempt: {attempt + 1}, error: {e}"
+                )
                 if attempt < self.retries - 1:
                     time.sleep(2**attempt)
                 else:
                     raise
-        raise requests.RequestException(f"HTTP {method} request failed after {self.retries} attempts: {full_url}")
+        raise requests.RequestException(
+            f"HTTP {method} request failed after {self.retries} attempts: {full_url}"
+        )
 
     def get(self, url: str, params: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         """发送 GET 请求。
@@ -169,7 +181,11 @@ class RequestsHttpProvider(HttpProvider):
             return response.text
 
     def post(
-        self, url: str, data: dict[str, Any] | None = None, json: dict[str, Any] | None = None, **kwargs: Any
+        self,
+        url: str,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """发送 POST 请求。
 
@@ -192,7 +208,11 @@ class RequestsHttpProvider(HttpProvider):
             return response.text
 
     def put(
-        self, url: str, data: dict[str, Any] | None = None, json: dict[str, Any] | None = None, **kwargs: Any
+        self,
+        url: str,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """发送 PUT 请求。
 

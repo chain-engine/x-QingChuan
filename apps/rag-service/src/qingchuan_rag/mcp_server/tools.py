@@ -26,7 +26,7 @@ from qingchuan_rag.constants import (
 )
 from qingchuan_rag.core.exceptions import GenerationError, RetrievalError
 from qingchuan_rag.core.logger import logger
-from qingchuan_rag.schemas.rag import RetrievedDocument
+from qingchuan_rag.schemas.rag import from_search_results
 from qingchuan_rag.services.rag_service import RAGService
 
 
@@ -53,7 +53,7 @@ def register_tools(
         use_mmr: bool = False,
         mmr_lambda: float = DEFAULT_MMR_LAMBDA,
         metadata_filter: dict[str, object] | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> dict[str, object]:
         """检索与查询最相关的知识片段，返回片段文本、相似度分数与元数据（仅检索，不生成）。
 
         Args:
@@ -65,7 +65,7 @@ def register_tools(
             metadata_filter: 元数据过滤条件，如 {"file_type": "pdf"}。
 
         Returns:
-            检索到的文档列表，每项含 chunk_id/document_id/text/score/metadata。
+            稳定结构 {"items": [片段, ...]}，每项含 chunk_id/document_id/text/score/metadata。
         """
         try:
             documents = get_rag_service().retrieve(
@@ -76,7 +76,10 @@ def register_tools(
                 mmr_lambda=mmr_lambda,
                 metadata_filter=metadata_filter,
             )
-            return [doc.model_dump() for doc in RetrievedDocument.from_search_results(documents)]
+            # 包一层稳定结构 {"items": [...]}：mcp SDK 服务端会把顶层 list 按元素
+            # 序列化为多个 text 块，单元素列表会被客户端解析为 dict 造成结构塌缩；
+            # 固定 dict 外壳保证客户端按 "items" 稳定取数组。
+            return {"items": [doc.model_dump() for doc in from_search_results(documents)]}
         except Exception as exc:  # noqa: BLE001 - 统一转换为 MCP 可读错误
             raise _to_mcp_error(exc) from exc
 
@@ -120,10 +123,19 @@ def register_tools(
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            # 对齐 RAGQueryResponse 的字段结构，便于客户端消费
+            # 对齐 RAGQueryResponse 的字段结构，便于客户端消费；
+            # retrieved_docs 需过 from_search_results 归一为领域契约
+            # （RetrievedChunk：chunk_id/document_id/text/score/metadata），
+            # 与 retrieve_docs 的 items 结构保持一致，否则客户端按同一契约解析会失败。
+            raw_docs = result.get("retrieved_docs", []) or []
+            normalized_docs = (
+                [doc.model_dump() for doc in from_search_results(raw_docs)]
+                if isinstance(raw_docs, list)
+                else []
+            )
             return {
                 "answer": result.get("answer", ""),
-                "retrieved_docs": result.get("retrieved_docs", []),
+                "retrieved_docs": normalized_docs,
                 "provider": result.get("provider", ""),
                 "model": result.get("model", ""),
                 "tokens_used": result.get("tokens_used"),

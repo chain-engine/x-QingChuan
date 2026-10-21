@@ -129,9 +129,7 @@ async def list_events(
     service: AgentTaskService = Depends(get_task_service),
 ) -> JSONResponse:
     """协作事件列表（管理后台事件面板 / 审计）。"""
-    items, total = service.list_events(
-        event_type=event_type, page=page, page_size=page_size
-    )
+    items, total = service.list_events(event_type=event_type, page=page, page_size=page_size)
     return success_response(
         data={
             "items": [_event_to_dict(ev) for ev in items],

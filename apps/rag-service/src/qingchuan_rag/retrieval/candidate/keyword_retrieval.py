@@ -106,7 +106,7 @@ class BM25Retriever(KeywordRetrievalProvider):
         except ImportError as e:
             logger.error("rank_bm25 not installed. Run: pip install rank-bm25")
             raise ImportError(
-                "rank_bm25 is required for BM25Retriever. " "Install with: pip install rank-bm25"
+                "rank_bm25 is required for BM25Retriever. Install with: pip install rank-bm25"
             ) from e
 
         self._document_store = documents

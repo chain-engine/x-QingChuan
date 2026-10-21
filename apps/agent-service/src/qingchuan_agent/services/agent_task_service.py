@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from qingchuan_agent.agents.runtime import AgentRuntime, get_agent_runtime
 from qingchuan_agent.constants import TaskStatus
 from qingchuan_agent.core.config import settings
-from qingchuan_agent.core.exceptions import NotFoundException, ValidationException
+from qingchuan_agent.core.exceptions import NotFoundError, ValidationError
 from qingchuan_agent.core.logger import logger
 from qingchuan_agent.infras.event_bus import EventBus, EventMessage, get_event_bus
 from qingchuan_agent.models.entities.agent_event import AgentEvent
@@ -79,7 +79,7 @@ class AgentTaskService:
         from qingchuan_agent.agents.registry import agent_registry
 
         if task_type and not agent_registry.has(task_type):
-            raise ValidationException(f"任务类型未注册 Agent：{task_type}")
+            raise ValidationError(f"任务类型未注册 Agent：{task_type}")
 
         # 2. 落库 pending（先持久化，获取任务 ID 作为审计主键）。
         #    task_type 非空列不可空，动态路由任务先用 "auto" 占位，
@@ -167,7 +167,7 @@ class AgentTaskService:
     def get_task(self, task_id: int) -> AgentTask:
         task = self._task_repo.get(task_id)
         if task is None:
-            raise NotFoundException(f"任务不存在：{task_id}")
+            raise NotFoundError(f"任务不存在：{task_id}")
         return task
 
     def list_tasks(
@@ -208,7 +208,7 @@ class AgentTaskService:
         """
         task = self.get_task(task_id)
         if not task.thread_id:
-            raise ValidationException("任务无线程 ID，无法恢复（可能未执行或已完成）")
+            raise ValidationError("任务无线程 ID，无法恢复（可能未执行或已完成）")
         update = {"decision": decision, "remark": remark, "extra": extra or {}}
         loop = asyncio.get_running_loop()
         final_state = await loop.run_in_executor(
@@ -243,7 +243,7 @@ class AgentTaskService:
         """按 ID 取单条协作事件（事件详情 / 审计面板），不存在抛 404。"""
         event = self._event_repo.get(event_id)
         if event is None:
-            raise NotFoundException(f"协作事件不存在：{event_id}")
+            raise NotFoundError(f"协作事件不存在：{event_id}")
         return event
 
 

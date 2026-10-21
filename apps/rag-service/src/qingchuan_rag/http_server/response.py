@@ -47,8 +47,8 @@ def success_response(
 
 def error_response(
     request: Request,
-    code: int = HttpStatus.INTERNAL_ERROR.value,
-    message: str = HttpStatus.INTERNAL_ERROR.desc,
+    code: int = HttpStatus.INTERNAL_SERVER_ERROR.value,
+    message: str = HttpStatus.INTERNAL_SERVER_ERROR.desc,
     data: Any = None,
 ) -> JSONResponse:
     """构造统一错误响应。

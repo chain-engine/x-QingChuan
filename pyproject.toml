@@ -1,6 +1,6 @@
 [project]
 name = "x-qingchuan"
-version = "0.1.0"
+version = "0.2.0"
 description = "晴川（x-QingChuan）：人社 API 离线索引 + RAG 检索 + Agent 智能问答（HTTP + MCP 双服务）"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

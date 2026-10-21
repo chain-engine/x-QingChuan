@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-统一异常处理模块（晴川 x-QingChuan，对齐北辰 core/exceptions 写法）
-定义异常层级结构与全局异常处理器。所有自定义异常继承 AppException：
+统一异常处理模块（晴川 x-QingChuan，对齐 rag-service core/exceptions 写法）。
+
+异常类单一事实来源在共享领域包 qingchuan_domain.exceptions（跨服务一致）；
+本模块仅 re-export，保证 agent 内部既有导入路径不变，并保留全局异常处理器：
     AppException
-    ├── BusinessException (4xx)
-    │   ├── ValidationException     (422)
-    │   ├── AuthenticationException (401)
-    │   ├── AuthorizationException  (403)
-    │   ├── NotFoundException       (404)
-    │   └── ConflictException       (409)
-    ├── AgentException       (400，Agent 编排异常)
-    └── SystemException (5xx)
-        ├── DatabaseException       (500)
-        └── ExternalServiceException(502)
+    ├── BusinessError (4xx)
+    │   ├── ValidationError       (400)
+    │   ├── UnauthorizedError     (401)
+    │   ├── ForbiddenError        (403)
+    │   ├── NotFoundError         (404)
+    │   ├── ConflictError         (409)
+    │   ├── RateLimitError        (429)
+    │   └── AgentException        (400，Agent 编排专属)
+    └── SystemError (5xx)
+        ├── DatabaseError         (500)
+        └── ExternalServiceError  (502)
 """
 
 from __future__ import annotations
@@ -23,151 +26,33 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from qingchuan_domain.exceptions import (
+    AgentException,
+    AppException,
+    BusinessError,
+    ConfigurationError,
+    ConflictError,
+    DatabaseError,
+    DocumentError,
+    EmbeddingError,
+    ExternalServiceError,
+    ForbiddenError,
+    GenerationError,
+    NotFoundError,
+    RateLimitError,
+    RetrievalError,
+    SyncError,
+    SystemError,
+    UnauthorizedError,
+    ValidationError,
+    VectorStoreError,
+)
 
-from qingchuan_agent.constants import ApiResponseMessage, HttpStatusCode
-
-
-class AppException(Exception):
-    """应用异常基类。"""
-
-    def __init__(
-        self,
-        message: str = "Application error",
-        code: int = HttpStatusCode.INTERNAL_SERVER_ERROR.mark,
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        self.message: str = message
-        self.code: int = code
-        self.details: Any | None = details
-        self.error_code: str | None = error_code
-        super().__init__(self.message)
-
-
-class BusinessException(AppException):
-    """业务异常基类（4xx）。"""
-
-    def __init__(
-        self,
-        message: str = "Business error",
-        code: int = HttpStatusCode.BAD_REQUEST.mark,
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=code, details=details, error_code=error_code)
-
-
-class ValidationException(BusinessException):
-    """参数校验异常（422）。"""
-
-    def __init__(
-        self,
-        message: str = "Validation error",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=422, details=details, error_code=error_code)
-
-
-class AuthenticationException(BusinessException):
-    """认证异常（401）。"""
-
-    def __init__(
-        self,
-        message: str = "Authentication failed",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=401, details=details, error_code=error_code)
-
-
-class AuthorizationException(BusinessException):
-    """授权异常（403）。"""
-
-    def __init__(
-        self,
-        message: str = "Permission denied",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=403, details=details, error_code=error_code)
-
-
-class NotFoundException(BusinessException):
-    """资源未找到异常（404）。"""
-
-    def __init__(
-        self,
-        message: str = "Resource not found",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=404, details=details, error_code=error_code)
-
-
-class ConflictException(BusinessException):
-    """资源冲突异常（409）。"""
-
-    def __init__(
-        self,
-        message: str = "Resource conflict",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=409, details=details, error_code=error_code)
-
-
-class AgentException(BusinessException):
-    """Agent 编排异常（400 系列，Agent 任务提交 / 路由 / 执行失败）。"""
-
-    def __init__(
-        self,
-        message: str = "Agent orchestration error",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=400, details=details, error_code=error_code)
-
-
-class SystemException(AppException):
-    """系统异常基类（5xx）。"""
-
-    def __init__(
-        self,
-        message: str = HttpStatusCode.INTERNAL_SERVER_ERROR.desc,
-        code: int = HttpStatusCode.INTERNAL_SERVER_ERROR.mark,
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=code, details=details, error_code=error_code)
-
-
-class DatabaseException(SystemException):
-    """数据库异常（500）。"""
-
-    def __init__(
-        self,
-        message: str = "Database error",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=500, details=details, error_code=error_code)
-
-
-class ExternalServiceException(SystemException):
-    """外部服务异常（502）。"""
-
-    def __init__(
-        self,
-        message: str = "External service error",
-        details: Any | None = None,
-        error_code: str | None = None,
-    ) -> None:
-        super().__init__(message=message, code=502, details=details, error_code=error_code)
+from qingchuan_agent.constants import ApiResponseMessage, HttpStatus
 
 
 async def _app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
-    """处理所有 AppException 及其子类。生产环境 5xx 不透出 details。"""
+    """处理所有 AppException 及其子类。生产环境 5xx 不透出 detail。"""
     from qingchuan_agent.core.config import settings
     from qingchuan_agent.core.logger import logger
 
@@ -176,10 +61,8 @@ async def _app_exception_handler(request: Request, exc: AppException) -> JSONRes
     logger.bind(request_id=request_id or "-").log(log_level, f"{type(exc).__name__}: {exc.message}")
     show_details = exc.code < 500 or settings.is_development
     data: dict[str, Any] | None = None
-    if exc.details is not None and show_details:
-        data = {"details": exc.details}
-    if exc.error_code:
-        data = {"error_code": exc.error_code, **(data or {})}
+    if exc.detail is not None and show_details:
+        data = {"details": exc.detail}
     return _build_error_json(request, exc.code, exc.message, data)
 
 
@@ -229,8 +112,8 @@ async def _generic_exception_handler(request: Request, exc: Exception) -> JSONRe
     logger.bind(request_id=request_id or "-").exception(f"Unhandled exception: {exc}")
     return _build_error_json(
         request,
-        code=HttpStatusCode.INTERNAL_SERVER_ERROR.mark,
-        message=HttpStatusCode.INTERNAL_SERVER_ERROR.desc,
+        code=HttpStatus.INTERNAL_SERVER_ERROR.mark,
+        message=HttpStatus.INTERNAL_SERVER_ERROR.desc,
     )
 
 
@@ -260,16 +143,26 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 __all__ = [
+    # 异常类（re-export qingchuan_domain.exceptions）
     "AgentException",
     "AppException",
-    "AuthenticationException",
-    "AuthorizationException",
-    "BusinessException",
-    "ConflictException",
-    "DatabaseException",
-    "ExternalServiceException",
-    "NotFoundException",
-    "SystemException",
-    "ValidationException",
+    "BusinessError",
+    "ConfigurationError",
+    "ConflictError",
+    "DatabaseError",
+    "DocumentError",
+    "EmbeddingError",
+    "ExternalServiceError",
+    "ForbiddenError",
+    "GenerationError",
+    "NotFoundError",
+    "RateLimitError",
+    "RetrievalError",
+    "SyncError",
+    "SystemError",
+    "UnauthorizedError",
+    "ValidationError",
+    "VectorStoreError",
+    # 处理器
     "register_exception_handlers",
 ]

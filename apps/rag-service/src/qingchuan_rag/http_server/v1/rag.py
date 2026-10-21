@@ -20,7 +20,7 @@ from qingchuan_rag.schemas.rag import (
     EmbeddingRequest,
     RAGQueryRequest,
     RetrievalRequest,
-    RetrievedDocument,
+    from_search_results,
 )
 from qingchuan_rag.schemas.responses import ResponseModel
 from qingchuan_rag.services.rag_service import RAGService
@@ -91,8 +91,8 @@ async def retrieve_docs(
             operator=operator,
         )
 
-        # 复用 RetrievedDocument.from_search_results 统一组装（与 MCP 层共用）
-        retrieved_docs = RetrievedDocument.from_search_results(documents)
+        # 复用 from_search_results 统一组装（与 MCP 层共用，输出领域契约 RetrievedChunk）
+        retrieved_docs = from_search_results(documents)
 
         data = {
             "query": body.query,

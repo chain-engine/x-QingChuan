@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the x-JinShan application
+# Start the x-QingChuan application
 
 set -e
 
@@ -20,4 +20,4 @@ if [ ! -f .env ]; then
 fi
 
 # Activate virtual environment and run
-uv run uvicorn jinshan_rag.main:app --host 0.0.0.0 --port 8010 --reload
+uv run uvicorn qingchuan_rag.main:app --host 0.0.0.0 --port 8010 --reload

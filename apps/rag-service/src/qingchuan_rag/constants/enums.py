@@ -9,25 +9,13 @@ Enums Module
     mark 为 str 的枚举（状态、类型、名称等） → StrBaseEnum
 """
 
-from qingchuan_rag.constants.base import IntBaseEnum, StrBaseEnum
+from qingchuan_domain.constants.enums import HttpStatus
+from qingchuan_rag.constants.base import StrBaseEnum
 
 # ====================================
 # 通用领域
 # ====================================
-
-
-class HttpStatus(IntBaseEnum):
-    """HTTP 状态码枚举"""
-
-    OK = 200, "成功"
-    CREATED = 201, "已创建"
-    BAD_REQUEST = 400, "请求错误"
-    UNAUTHORIZED = 401, "未授权"
-    FORBIDDEN = 403, "禁止访问"
-    NOT_FOUND = 404, "资源不存在"
-    CONFLICT = 409, "资源冲突"
-    TOO_MANY_REQUESTS = 429, "请求过于频繁"
-    INTERNAL_ERROR = 500, "服务器内部错误"
+# HttpStatus 单一事实来源在 qingchuan_domain.constants.enums（本文件顶部 re-export）
 
 
 class HeaderType(StrBaseEnum):

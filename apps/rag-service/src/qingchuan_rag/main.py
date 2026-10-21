@@ -61,11 +61,14 @@ async def lifespan(app: FastAPI):
         index_name="documents",
     )
 
-    # 初始化向量存储 Repository层（稠密索引）
+    # 初始化向量存储 Repository层（稠密索引；按 VECTOR_STORE_TYPE 选择 Chroma / Milvus）
     vector_repo = VectorRepository(
         persist_directory=settings.VECTOR_STORE_PERSIST_DIR,
         collection_name=settings.VECTOR_STORE_COLLECTION_NAME,
         distance_type=settings.VECTOR_STORE_DISTANCE,
+        store_type=settings.VECTOR_STORE_TYPE,
+        milvus_uri=settings.VECTOR_STORE_MILVUS_URI,
+        dimension=settings.VECTOR_STORE_DIMENSION,
     )
 
     # 初始化文档服务（同时构建稠密和稀疏索引）
@@ -216,7 +219,7 @@ def create_app() -> FastAPI:
         logger.opt(exception=True).error("Unhandled exception occurred")
         return error_response(
             request=request,
-            code=HttpStatus.INTERNAL_ERROR.value,
+            code=HttpStatus.INTERNAL_SERVER_ERROR.value,
             message="Internal server error",
             data=str(exc) if settings.DEBUG else None,
         )

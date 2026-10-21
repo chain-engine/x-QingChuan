@@ -9,25 +9,36 @@ from typing import Any
 
 from qingchuan_rag.constants import DistanceType
 from qingchuan_rag.core.logger import logger
-from qingchuan_rag.infras.vector import ChromaVectorStore
+from qingchuan_rag.infras.vector import ChromaVectorStore, MilvusVectorStore
 from qingchuan_rag.repositories.base_repository import BaseRepository
 from qingchuan_rag.utils.similarity import SimilaritySearchEngine
 
 
 class VectorRepository(BaseRepository):
-    """向量仓库"""
+    """向量仓库（按 store_type 选择 Chroma / Milvus 实现）"""
 
     def __init__(
         self,
         persist_directory: str = "./data/chroma",
         collection_name: str = "documents",
         distance_type: str = "cosine",
+        store_type: str = "chroma",
+        milvus_uri: str = "./data/milvus.db",
+        dimension: int | None = None,
     ):
-        self._store = ChromaVectorStore(
-            persist_directory=persist_directory,
-            collection_name=collection_name,
-            distance_type=distance_type,
-        )
+        if store_type == "milvus":
+            self._store = MilvusVectorStore(
+                uri=milvus_uri,
+                collection_name=collection_name,
+                metric_type=distance_type,
+                dimension=dimension,
+            )
+        else:
+            self._store = ChromaVectorStore(
+                persist_directory=persist_directory,
+                collection_name=collection_name,
+                distance_type=distance_type,
+            )
         self._distance_type = self._parse_distance_type(distance_type)
         self._similarity_engine = SimilaritySearchEngine(distance_type=self._distance_type)
         self._initialized = False
@@ -150,21 +161,7 @@ class VectorRepository(BaseRepository):
     def delete_by_document_id(self, document_id: str) -> int:
         """根据文档ID删除向量"""
         self._ensure_initialized()
-
-        results = self._store.search(
-            query_embedding=[0.0] * 1024,  # 使用零向量搜索
-            top_k=10000,
-            where={"document_id": document_id},
-        )
-
-        ids_to_delete = [
-            r["id"] for r in results if r.get("metadata", {}).get("document_id") == document_id
-        ]
-
-        if ids_to_delete:
-            self._store.delete(ids_to_delete)
-
-        return len(ids_to_delete)
+        return self._store.delete_by_metadata({"document_id": document_id})
 
     def get_by_document_id(self, document_id: str) -> list[dict[str, Any]]:
         """根据文档ID获取向量"""

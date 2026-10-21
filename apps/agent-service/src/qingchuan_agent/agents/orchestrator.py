@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 # 节点实现
 # ------------------------------------------------------------
 
+
 def route_node(state: OrchestratorState, resolver: RouteResolver | None = None) -> dict[str, Any]:
     """路由节点：委托 RouteResolver 决定目标 Agent（explicit / llm / hybrid）。
 
@@ -95,6 +96,7 @@ def aggregate_node(state: OrchestratorState) -> dict[str, Any]:
 # ------------------------------------------------------------
 # 编排图构建
 # ------------------------------------------------------------
+
 
 def build_orchestrator_graph(
     registry: AgentRegistry,

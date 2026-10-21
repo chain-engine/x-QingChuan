@@ -12,6 +12,7 @@ HTTP 请求能力复用 infras/http.py（RequestsHttpProvider）。
 未配置真实地址时（HRSS_MOCK=true，默认）返回本地示例数据，
 保证同步链路（触发 → 索引 → 检索）可端到端调试。
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -87,9 +88,7 @@ class HRSSDataSourceClient:
     def _build_document_text(self, record: dict[str, Any]) -> str:
         """人社记录 → 可检索文本。"""
         if record.get("record_type") == TYPE_POLICY:
-            return "\n".join(
-                filter(None, [record.get("title"), record.get("content")])
-            )
+            return "\n".join(filter(None, [record.get("title"), record.get("content")]))
         parts = [
             f"参保人：{record.get('name') or ''}",
             f"参保类型：{record.get('insured_type') or ''}",
@@ -161,8 +160,16 @@ class HRSSDataSourceClient:
             }
             for i, (t, c, cat) in enumerate(
                 (
-                    ("灵活就业人员参加企业职工基本养老保险办法", "灵活就业人员可以个人身份参加企业职工基本养老保险，缴费基数可在规定范围内自主选择。", "养老保险"),
-                    ("城乡居民基本医疗保险门诊统筹实施细则", "参保居民在定点基层医疗机构发生的符合规定的普通门诊医疗费用，按比例由统筹基金支付。", "医疗保险"),
+                    (
+                        "灵活就业人员参加企业职工基本养老保险办法",
+                        "灵活就业人员可以个人身份参加企业职工基本养老保险，缴费基数可在规定范围内自主选择。",
+                        "养老保险",
+                    ),
+                    (
+                        "城乡居民基本医疗保险门诊统筹实施细则",
+                        "参保居民在定点基层医疗机构发生的符合规定的普通门诊医疗费用，按比例由统筹基金支付。",
+                        "医疗保险",
+                    ),
                 ),
                 start=1,
             )
@@ -179,9 +186,7 @@ class HRSSDataSourceClient:
             }
             for i in range(1, self._mock_count + 1)
         ]
-        return [
-            {**p, "record_type": TYPE_POLICY} for p in policies
-        ] + [
+        return [{**p, "record_type": TYPE_POLICY} for p in policies] + [
             {**i, "record_type": TYPE_INSURED} for i in insureds
         ]
 

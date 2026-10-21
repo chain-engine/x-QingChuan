@@ -33,3 +33,5 @@ __all__ = [
     "agent_registry",
     "get_agent_runtime",
 ]
+
+__version__ = "0.2.0"

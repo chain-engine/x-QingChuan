@@ -117,9 +117,7 @@ class MMRReranker(BaseRerankingProvider):
                 break
 
         reranked = [candidates[i] for i in selected_indices]
-        logger.debug(
-            f"MMRReranker: reranked {len(candidates)} candidates " f"(lambda={lambda_param})"
-        )
+        logger.debug(f"MMRReranker: reranked {len(candidates)} candidates (lambda={lambda_param})")
         return reranked
 
     def _resolve_query_vector(

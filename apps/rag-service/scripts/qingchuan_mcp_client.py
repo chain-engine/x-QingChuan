@@ -23,6 +23,7 @@
       并兼容 JSON 与 SSE 两种响应格式；
     - verbose=True 时打印每个 JSON-RPC 请求的请求头、请求体与原始响应。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,7 +47,9 @@ class QingChuanMcpClient:
         timeout: int = 90,
     ) -> None:
         # base_url 形如 http://127.0.0.1:8010 或 http://127.0.0.1:8010/mcp，统一收敛到 /mcp
-        self.endpoint = base_url.rstrip("/") + ("" if base_url.rstrip("/").endswith(MCP_PATH) else MCP_PATH)
+        self.endpoint = base_url.rstrip("/") + (
+            "" if base_url.rstrip("/").endswith(MCP_PATH) else MCP_PATH
+        )
         self.verbose = verbose
         self.timeout = timeout
         self.session_id: str | None = None
@@ -109,16 +112,18 @@ class QingChuanMcpClient:
     def initialize(self) -> dict:
         """MCP 握手：initialize（拿 session id）+ notifications/initialized。"""
         request_id = str(uuid.uuid4())
-        result = self._post({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-06-18",
-                "capabilities": {"tools": {}},
-                "clientInfo": {"name": "qingchuan-mcp-client", "version": "0.2.0"},
-            },
-        })
+        result = self._post(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {"tools": {}},
+                    "clientInfo": {"name": "qingchuan-mcp-client", "version": "0.2.0"},
+                },
+            }
+        )
         if self.verbose:
             version = result.get("result", {}).get("protocolVersion")
             print(f"\n✓ initialize 成功，protocolVersion={version}")
@@ -127,7 +132,9 @@ class QingChuanMcpClient:
 
     def list_tools(self) -> list[dict]:
         """列出服务端可用工具。"""
-        result = self._post({"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": "tools/list", "params": {}})
+        result = self._post(
+            {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": "tools/list", "params": {}}
+        )
         tools = result.get("result", {}).get("tools", [])
         if self.verbose:
             print(f"\n✓ 工具列表（共 {len(tools)} 个）：")
@@ -139,18 +146,22 @@ class QingChuanMcpClient:
         """调用指定工具并打印返回内容。"""
         if self.verbose:
             print(f"\n→ 调用工具 {name}({json.dumps(arguments, ensure_ascii=False)})")
-        result = self._post({
-            "jsonrpc": "2.0",
-            "id": str(uuid.uuid4()),
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        })
+        result = self._post(
+            {
+                "jsonrpc": "2.0",
+                "id": str(uuid.uuid4()),
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+        )
         if self.verbose:
             for item in result.get("result", {}).get("content", []):
                 if item.get("type") == "text":
                     print(f"\n✓ 工具返回：\n{item.get('text', '')[:1000]}")
                 elif item.get("type") == "json":
-                    print(f"\n✓ 工具返回(JSON)：\n{json.dumps(item.get('json', {}), ensure_ascii=False, indent=2)[:1500]}")
+                    print(
+                        f"\n✓ 工具返回(JSON)：\n{json.dumps(item.get('json', {}), ensure_ascii=False, indent=2)[:1500]}"
+                    )
             if result.get("result", {}).get("isError"):
                 print("\n⚠ 工具执行返回错误标志 isError=true")
         return result
@@ -161,10 +172,14 @@ def _build_parser() -> argparse.ArgumentParser:
         description="晴川 MCP 客户端（模拟外部 Agent 接入）",
         epilog="示例：\n"
         "  python scripts/qingchuan_mcp_client.py --list\n"
-        "  python scripts/qingchuan_mcp_client.py --tool rag_query --query \"什么是RAG技术？\"\n"
-        "  python scripts/qingchuan_mcp_client.py --tool retrieve_docs --query \"人社\" --top-k 3",
+        '  python scripts/qingchuan_mcp_client.py --tool rag_query --query "什么是RAG技术？"\n'
+        '  python scripts/qingchuan_mcp_client.py --tool retrieve_docs --query "人社" --top-k 3',
     )
-    parser.add_argument("--url", default="http://127.0.0.1:8010/mcp", help="MCP 端点（默认 http://127.0.0.1:8010/mcp）")
+    parser.add_argument(
+        "--url",
+        default="http://127.0.0.1:8010/mcp",
+        help="MCP 端点（默认 http://127.0.0.1:8010/mcp）",
+    )
     parser.add_argument("--list", action="store_true", help="仅列出工具列表")
     parser.add_argument("--tool", choices=["rag_query", "retrieve_docs"], help="要调用的工具名")
     parser.add_argument("--query", default="什么是RAG技术？", help="查询内容")

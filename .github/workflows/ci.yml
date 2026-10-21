@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint（ruff）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ruff check
+        uses: astral-sh/ruff-action@v2
+        with:
+          args: check .
+
+      - name: Ruff format check
+        uses: astral-sh/ruff-action@v2
+        with:
+          args: format --check .
+
+  test:
+    name: Test（pytest + 编译）
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      # 按 uv.lock 锁定安装整个 workspace（含 rag 依赖：torch / chromadb 体积较大，
+      # 依赖 setup-uv 缓存加速二次运行）
+      - name: Install workspace（--frozen）
+        run: uv sync --frozen
+
+      # 全包编译检查（agent 暂未接入 pytest，由 compileall 兜底语法/导入错误）
+      - name: Compile all packages
+        run: uv run --frozen python -m compileall -q apps packages
+
+      # rag-service 测试套件：测试夹具自洽（临时 SQLite + 桩服务），无需外部数据库
+      - name: Run rag-service tests
+        run: uv run --frozen --package qingchuan-rag pytest apps/rag-service/tests -q
+
+      # 人社同步管道 CLI 冒烟：mock 数据端到端走通（写索引 + 任务状态）
+      - name: Pipeline smoke（mock 人社同步）
+        run: uv run --frozen --package qingchuan-rag python -m qingchuan_rag.pipeline.cli stats
