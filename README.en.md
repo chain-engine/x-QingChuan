@@ -3,8 +3,6 @@
 HRSS API offline indexing + RAG retrieval + Agent-powered Q&A platform.
 Make government-domain knowledge searchable, answerable and orchestratable — built on HRSS data, exposed via dual-protocol (HTTP + MCP) services, and scheduled by LangGraph multi-agent orchestration.
 
-[中文](README.md) | English
-
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-1C3C3C)
@@ -21,6 +19,8 @@ Make government-domain knowledge searchable, answerable and orchestratable — b
 ![Forks](https://img.shields.io/github/forks/chain-engine/x-QingChuan?label=Forks)
 ![License](https://img.shields.io/github/license/chain-engine/x-QingChuan?label=License)
 ![Commits](https://img.shields.io/github/commit-activity/m/chain-engine/x-QingChuan?label=Commits)
+
+[中文](README.md) | English
 
 ## 💡 Project Introduction
 
@@ -77,9 +77,17 @@ cp apps/rag-service/config.yaml.example apps/rag-service/config.yaml
 | `HRSS_MOCK` | `true` | mock mode: uses local sample data for end-to-end integration without a real API |
 | `EMBEDDING_MODEL` | `BAAI/bge-m3` | embedding model (local offline inference) |
 | `VECTOR_STORE_PERSIST_DIR` | `./data/chroma` | Chroma vector store persistence directory |
-| `GENERATION_PROVIDER` / `GENERATION_MODEL` | `mimo` / `mimo-v2.6-pro` | generation model; supports DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
+| `GENERATION_PROVIDER` / `GENERATION_MODEL` | `mimo` / `mimo-v2.6-pro` | **rag-service only** generation model; supports DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
+| `QINGCHUAN_AGENT_AI_LLM_API_KEY` | empty (Mock) | **agent-service only** LLM API key (independent of rag-service's `MIMO_*`) |
+| `QINGCHUAN_AGENT_AI_LLM_BASE_URL` | empty | agent-service LLM base URL (OpenAI-compatible, e.g. `https://api.xiaomimimo.com/v1`) |
+| `QINGCHUAN_AGENT_AI_LLM_MODEL` | `deepseek-chat` | agent-service model name (e.g. `mimo-v2.6-pro`); edit only these three variables to switch provider |
 | `QINGCHUAN_AGENT_DATABASE_ENABLED` | `false` | agent-service task/event persistence toggle (auto-creates tables on first start) |
 | `QINGCHUAN_AGENT_RAG_HTTP_BASE_URL` | `http://rag-service:8010` | rag client base URL used by agent-service (use `http://127.0.0.1:8010` locally) |
+
+> **LLM config separation**: the LLM for agent-service and rag-service are configured independently and never read each other's variables.
+> rag-service reads `MIMO_*` / `GENERATION_*`; agent-service only reads `QINGCHUAN_AGENT_AI_LLM_*`
+> (two-level nested fields require explicit reload in core/config.py; both OS env and .env are supported, OS takes precedence).
+> To switch provider for either service, edit only its own block.
 
 ### 🚀 5. Start the Services
 
@@ -346,7 +354,7 @@ Both services enable **Swagger interactive docs / ReDoc read-only docs / OpenAPI
 | rag-service (:8010) | <http://127.0.0.1:8010/docs> | <http://127.0.0.1:8010/redoc> | <http://127.0.0.1:8010/openapi.json> | <http://127.0.0.1:8010/mcp> (Streamable HTTP) |
 | agent-service (:8020) | <http://127.0.0.1:8020/docs> | <http://127.0.0.1:8020/redoc> | <http://127.0.0.1:8020/openapi.json> | — (calls rag-service via MCP client) |
 
-### Core API List
+### 📋 Core API List
 
 **agent-service (/api/v1, 9 endpoints)**:
 
@@ -379,16 +387,17 @@ Both services enable **Swagger interactive docs / ReDoc read-only docs / OpenAPI
 | POST | `/api/v1/sync/trigger` | Trigger an HRSS sync (incremental by default; `full=true` for full) |
 | GET | `/api/v1/sync/status` | Latest sync status |
 | GET | `/api/v1/sync/status/{task_id}` | Sync task status by ID |
-| GET | `/api/v1/logs` | Audit log list (paginated) |
-| GET | `/api/v1/logs/{log_id}` | Audit log detail |
+| GET | `/api/v1/audit/logs` | Audit log list (paginated) |
+| GET | `/api/v1/audit/logs/{log_id}` | Audit log detail |
 
 **MCP tools (rag-service, read-only)**:
 
 | Tool | Description |
 | --- | --- |
 | `retrieve_docs` | Retrieve knowledge chunks most relevant to a query (supports top_k / similarity threshold / MMR / metadata filter) |
+| `rag_query` | Generate a complete answer from the knowledge base (retrieve → augment → generate), returns answer and cited chunks |
 
-### Permission & Access Control
+### 🔐 Permission & Access Control
 
 - **agent-service**: the tool center follows the principle of "read-only tools are directly callable, write operations require human execution"; task routing supports explicit / llm / hybrid modes; production (`APP_ENV=production`) enforces validation — DEBUG forbidden, CORS whitelist cannot be `*`, checkpoint must be redis;
 - **rag-service**: built-in slowapi rate limiting (`RATE_LIMIT_ENABLED` / per-minute / per-hour quotas); all write operations (document upload / delete, sync trigger) are written to audit logs with the fixed operator `internal`; audit endpoints are read-only.

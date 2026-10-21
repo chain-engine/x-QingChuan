@@ -26,7 +26,8 @@ dependencies = [
   # 向量 / 嵌入 / 稀疏检索
   "chromadb>=0.4.18",
   "sentence-transformers>=2.2.2",
-  "torch==2.12.0",  # 与观海对齐（本机已验证可运行；2.14.x 在 Windows 报 shm.dll 缺失）
+  # 部署机无 GPU：torch 走 CPU-only 索引（见 tool.uv.sources），避免捆绑约 4GB nvidia CUDA 库
+  "torch==2.12.0",
   "numpy>=1.24.0",
   "rank-bm25>=0.2.2",
   # 文本切分 / LLM
@@ -47,6 +48,8 @@ dependencies = [
 
 [tool.uv.sources]
 qingchuan-domain = { workspace = true }
+# torch 固定从 CPU-only 索引拉取（index 定义见下方 [[tool.uv.index]] pytorch-cpu）
+torch = { index = "pytorch-cpu" }
 
 [project.scripts]
 qingchuan-rag-api = "qingchuan_rag.cli:main"
@@ -55,6 +58,12 @@ qingchuan-pipeline = "qingchuan_rag.pipeline.cli:main"
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"
 default = true
+
+# CPU-only PyTorch 索引：仅 torch 显式引用（explicit=true），其余依赖仍走上方默认镜像
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]

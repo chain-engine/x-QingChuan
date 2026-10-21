@@ -12,6 +12,7 @@ from typing import Any
 
 from qingchuan_rag.core.exceptions import VectorStoreError
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.paths import resolve_service_path
 
 
 class BM25IndexStore:
@@ -38,7 +39,8 @@ class BM25IndexStore:
             k1: BM25 参数，控制词频饱和度
             b: BM25 参数，控制文档长度归一化
         """
-        self.persist_directory = persist_directory
+        # 相对路径锚定到服务根目录（apps/rag-service/data），避免随 CWD 漂移写入仓库根目录
+        self.persist_directory = resolve_service_path(persist_directory)
         self.index_name = index_name
         self.k1 = k1
         self.b = b

@@ -141,7 +141,9 @@ def get_log_file_path() -> str:
         dir_path: str = os.path.dirname(base_path)
         ext: str = os.path.splitext(base_path)[1] or ".log"
         return os.path.join(dir_path, f"{APP_NAME}-{{time:YYYYMMDDHH}}{ext}")
-    return f"logs/{APP_NAME}-{{time:YYYYMMDDHH}}.log"
+    # 兜底：未配置 LOG_FILE_PATH 时也落到服务根目录 logs/ 下，避免写入 CWD（如仓库根目录）
+    service_root = Path(__file__).parent.parent.parent.parent.resolve()
+    return str(service_root / f"logs/{APP_NAME}-{{time:YYYYMMDDHH}}.log")
 
 
 logger = _logger

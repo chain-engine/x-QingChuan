@@ -203,6 +203,46 @@ class Settings(BaseSettings):
             self.rag = RagClientSettings(**merged)
         return self
 
+    @model_validator(mode="after")
+    def _load_ai_from_env(self) -> Settings:
+        """从 OS 环境变量与 .env 补齐 ai.llm 段。
+
+        与 database / rag 段同因：pydantic-settings 的 env_file 不作用于嵌套模型字段。
+        区别在于 ai.llm 是两级嵌套（Settings.ai.llm），连 OS 环境变量的两级前缀
+        也不会被 pydantic 组装读取，因此这里同时兜住 os.environ 与 .env。
+        优先级：OS 环境变量 > .env > 代码默认值（OS 已注入时不再用 .env 覆盖）。
+        """
+        prefix = "QINGCHUAN_AGENT_AI_LLM_"
+        os_values = {k: v for k, v in os.environ.items() if k.startswith(prefix)}
+        file_values = dotenv_values(QINGCHUAN_ROOT_ENV)
+        overrides: dict[str, object] = {}
+        for field in (
+            "base_url",
+            "api_key",
+            "model",
+            "temperature",
+            "max_tokens",
+            "timeout_seconds",
+        ):
+            env_key = prefix + field.upper()
+            raw = os_values.get(env_key, file_values.get(env_key))
+            if raw is None:
+                continue
+            try:
+                if field == "temperature":
+                    overrides[field] = float(raw)
+                elif field in ("max_tokens", "timeout_seconds"):
+                    overrides[field] = int(raw)
+                else:
+                    overrides[field] = str(raw)
+            except (ValueError, TypeError):
+                pass
+        if overrides:
+            merged = self.ai.llm.model_dump()
+            merged.update(overrides)
+            self.ai.llm = AiLLMSettings(**merged)
+        return self
+
     # ----------------------------------------------------------
     # 环境判断
     # ----------------------------------------------------------

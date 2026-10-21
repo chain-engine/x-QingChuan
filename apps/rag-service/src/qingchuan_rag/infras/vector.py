@@ -15,6 +15,7 @@ from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
 
 from qingchuan_rag.core.exceptions import VectorStoreError
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.paths import resolve_service_path
 
 
 class VectorStoreBase(ABC):
@@ -127,7 +128,8 @@ class ChromaVectorStore(VectorStoreBase):
         collection_name: str = "documents",
         distance_type: str = "cosine",
     ):
-        self.persist_directory = persist_directory
+        # 相对路径锚定到服务根目录（apps/rag-service/data），避免随 CWD 漂移写入仓库根目录
+        self.persist_directory = resolve_service_path(persist_directory)
         self.collection_name = collection_name
         self.distance_type = distance_type
         self._client: chromadb.PersistentClient | None = None
@@ -327,7 +329,8 @@ class MilvusVectorStore(VectorStoreBase):
         metric_type: str = "cosine",
         dimension: int | None = None,
     ):
-        self._uri = uri
+        # 本地文件相对路径锚定到服务根目录；远程地址（http://...）原样保留
+        self._uri = resolve_service_path(uri)
         self.collection_name = collection_name
         self._metric_type = self.METRIC_MAP.get(metric_type.lower(), "COSINE")
         self._dimension = dimension

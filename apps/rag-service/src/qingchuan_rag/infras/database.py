@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
@@ -22,10 +23,24 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from qingchuan_rag.core.config import settings
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.paths import SERVICE_ROOT
 
 
 class Base(DeclarativeBase):
     """ORM 声明式基类（SQLAlchemy 2.0 风格）。"""
+
+
+def _anchor_sqlite_url(database_url: str) -> str:
+    """将相对路径的 sqlite URL 锚定到服务根目录（sqlite:///./data/x.db → sqlite:///<服务根>/data/x.db）。
+
+    - sqlite:///:memory: 等内存库、绝对路径、其他 scheme 原样返回。
+    """
+    if not database_url.startswith("sqlite:///"):
+        return database_url
+    rest = database_url[len("sqlite:///"):]
+    if not rest or rest.startswith(":") or os.path.isabs(rest):
+        return database_url
+    return f"sqlite:///{SERVICE_ROOT / rest}"
 
 
 # ============================================================
@@ -145,6 +160,8 @@ class SqliteProvider(DatabaseProvider):
     def __init__(self, database_url: str, echo: bool = False) -> None:
         if not database_url:
             raise ValueError("DATABASE_URL 配置不能为空，请在配置文件或环境变量中设置")
+        # 相对路径 sqlite 锚定到服务根目录，避免随 CWD 漂移写入仓库根目录
+        database_url = _anchor_sqlite_url(database_url)
         self._engine = create_engine(
             database_url,
             connect_args={"check_same_thread": False},

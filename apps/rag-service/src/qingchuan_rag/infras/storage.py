@@ -12,6 +12,7 @@ from typing import Any
 
 from qingchuan_rag.core.exceptions import DocumentError
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.paths import resolve_service_path
 
 
 class DocumentStoreBase(ABC):
@@ -84,7 +85,8 @@ class JSONDocumentStore(DocumentStoreBase):
     """JSON文件文档存储实现"""
 
     def __init__(self, storage_path: str = "./data/documents"):
-        self.storage_path = Path(storage_path)
+        # 相对路径锚定到服务根目录（apps/rag-service/data），避免随 CWD 漂移写入仓库根目录
+        self.storage_path = Path(resolve_service_path(storage_path))
         self._initialized = False
 
     def initialize(self) -> None:
