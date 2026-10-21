@@ -58,4 +58,4 @@ __all__ = [  # noqa: RUF022 - 按语义分组排序，保留可读性
     "ConfigurationError",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.1.0"

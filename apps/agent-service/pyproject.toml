@@ -1,6 +1,6 @@
 [project]
 name = "qingchuan-agent"
-version = "0.2.0"
+version = "0.1.0"
 description = "晴川 agent-service：人机交互的多智能体编排平台（LangGraph 编排 + HTTP，经 MCP 工具调用 rag-service）"
 requires-python = ">=3.12"
 dependencies = [

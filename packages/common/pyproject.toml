@@ -1,6 +1,6 @@
 [project]
 name = "qingchuan-common"
-version = "0.2.0"
+version = "0.1.0"
 description = "晴川跨服务通用件：MCP 客户端封装 / 鉴权 / 审计 / 观测（MCP 客户端已实现）"
 requires-python = ">=3.12"
 dependencies = [

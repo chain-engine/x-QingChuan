@@ -2489,7 +2489,7 @@ wheels = [
 
 [[package]]
 name = "qingchuan-agent"
-version = "0.2.0"
+version = "0.1.0"
 source = { editable = "apps/agent-service" }
 dependencies = [
     { name = "fastapi" },
@@ -2524,7 +2524,7 @@ requires-dist = [
 
 [[package]]
 name = "qingchuan-common"
-version = "0.2.0"
+version = "0.1.0"
 source = { editable = "packages/common" }
 dependencies = [
     { name = "httpx2" },
@@ -2539,7 +2539,7 @@ requires-dist = [
 
 [[package]]
 name = "qingchuan-domain"
-version = "0.2.0"
+version = "0.1.0"
 source = { editable = "packages/domain" }
 dependencies = [
     { name = "pydantic" },
@@ -2550,7 +2550,7 @@ requires-dist = [{ name = "pydantic", specifier = ">=2.9" }]
 
 [[package]]
 name = "qingchuan-rag"
-version = "0.2.0"
+version = "0.1.0"
 source = { editable = "apps/rag-service" }
 dependencies = [
     { name = "apscheduler" },
@@ -3534,7 +3534,7 @@ wheels = [
 
 [[package]]
 name = "x-qingchuan"
-version = "0.2.0"
+version = "0.1.0"
 source = { virtual = "." }
 
 [[package]]

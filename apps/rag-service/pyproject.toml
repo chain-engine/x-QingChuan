@@ -1,6 +1,6 @@
 [project]
 name = "qingchuan-rag"
-version = "0.2.0"
+version = "0.1.0"
 description = "晴川 rag-service：人社（HRSS）数据离线索引 + RAG（检索增强生成）一体化服务平台"
 readme = "README.md"
 requires-python = ">=3.12"

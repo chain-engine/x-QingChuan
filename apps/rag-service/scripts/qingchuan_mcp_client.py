@@ -120,7 +120,7 @@ class QingChuanMcpClient:
                 "params": {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {"tools": {}},
-                    "clientInfo": {"name": "qingchuan-mcp-client", "version": "0.2.0"},
+                    "clientInfo": {"name": "qingchuan-mcp-client", "version": "0.1.0"},
                 },
             }
         )

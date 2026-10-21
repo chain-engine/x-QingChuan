@@ -78,10 +78,26 @@ def setup_cors_middleware(app) -> None:
     if not getattr(settings, "CORS_ENABLED", True):
         return
 
+    allow_origins = get_cors_origins()
+    allow_credentials = settings.cors.allow_credentials
+
+    # 与 agent-service 校验对齐：生产环境禁止通配来源（任意源 + 凭证 = 安全风险）
+    if settings.SERVER_ENVIRONMENT == "production" and "*" in allow_origins:
+        raise ValueError(
+            "生产环境 CORS_ALLOW_ORIGINS 不能为 *，请显式配置允许的域名列表"
+        )
+
+    # 通配来源与凭证互斥：浏览器禁止 ACAO:* 携带凭证，且"任意源+凭证"等于任意站点可携凭证请求
+    if "*" in allow_origins and allow_credentials:
+        logger.warning(
+            "CORS allow_origins 包含 *，自动关闭 allow_credentials（通配来源与凭证互斥）"
+        )
+        allow_credentials = False
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=get_cors_origins(),
-        allow_credentials=True,
+        allow_origins=allow_origins,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )

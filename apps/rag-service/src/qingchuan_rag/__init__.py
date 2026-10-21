@@ -5,6 +5,6 @@
 领域协议（检索 / 同步 / 常量 / 异常）统一放共享领域包 qingchuan_domain。
 """
 
-__version__ = "0.2.0"
+__version__ = "0.1.0"
 
 __all__ = ["__version__"]
