@@ -96,19 +96,14 @@ class BM25Repository(BaseRepository):
         self._store.delete(ids)
 
     def delete_by_document_id(self, document_id: str) -> int:
-        """根据文档ID删除"""
+        """根据文档ID删除该文档的全部 chunks。"""
         self._ensure_initialized()
 
-        # 搜索该文档的所有 chunks
-        results = self._store.search(
-            query="",  # 空查询，返回所有文档
-            top_k=10000,
-        )
-
-        ids_to_delete = []
-        for r in results:
-            if r.get("metadata", {}).get("document_id") == document_id:
-                ids_to_delete.append(r.get("id"))
+        ids_to_delete = [
+            r["id"]
+            for r in self._store.get_all()
+            if r.get("metadata", {}).get("document_id") == document_id
+        ]
 
         if ids_to_delete:
             self._store.delete(ids_to_delete)
@@ -116,15 +111,14 @@ class BM25Repository(BaseRepository):
         return len(ids_to_delete)
 
     def get_by_document_id(self, document_id: str) -> list[dict[str, Any]]:
-        """根据文档ID获取 chunks"""
+        """根据文档ID获取 chunks。"""
         self._ensure_initialized()
 
-        results = self._store.search(
-            query="",
-            top_k=10000,
-        )
-
-        return [r for r in results if r.get("metadata", {}).get("document_id") == document_id]
+        return [
+            r
+            for r in self._store.get_all()
+            if r.get("metadata", {}).get("document_id") == document_id
+        ]
 
     def get_count(self) -> int:
         """获取文档数量"""

@@ -93,7 +93,7 @@ async def get_status(
     document_service: DocumentService = Depends(get_document_service),
 ) -> dict[str, Any]:
     """系统状态接口"""
-    uptime = (datetime.utcnow() - _start_time).total_seconds()
+    uptime = (datetime.now(UTC) - _start_time).total_seconds()
     vector_count = 0
     document_count = 0
 

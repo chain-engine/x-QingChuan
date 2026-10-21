@@ -70,6 +70,26 @@ class DocumentRepository(BaseRepository):
         self._ensure_initialized()
         return self._store.list_all()
 
+    def list_page(
+        self,
+        skip: int = 0,
+        limit: int | None = None,
+        status: str | None = None,
+        file_type: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """存储层分页列出文档（过滤与分页下推到存储层）。
+
+        Returns:
+            tuple[list[dict[str, Any]], int]: (当前页文档列表, 匹配总数)
+        """
+        self._ensure_initialized()
+        return self._store.list_page(
+            skip=skip,
+            limit=limit,
+            status=status,
+            file_type=file_type,
+        )
+
     def exists(self, document_id: str) -> bool:
         """检查文档是否存在"""
         self._ensure_initialized()

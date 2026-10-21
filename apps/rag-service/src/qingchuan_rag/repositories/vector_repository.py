@@ -164,16 +164,10 @@ class VectorRepository(BaseRepository):
         return self._store.delete_by_metadata({"document_id": document_id})
 
     def get_by_document_id(self, document_id: str) -> list[dict[str, Any]]:
-        """根据文档ID获取向量"""
+        """根据文档ID获取全部 chunks（存储层按 metadata 过滤，不构造查询向量）。"""
         self._ensure_initialized()
 
-        results = self._store.search(
-            query_embedding=[0.0] * 1024,
-            top_k=10000,
-            where={"document_id": document_id},
-        )
-
-        return [r for r in results if r.get("metadata", {}).get("document_id") == document_id]
+        return self._store.get_by_metadata({"document_id": document_id})
 
     def get_count(self) -> int:
         """获取向量总数"""

@@ -1,6 +1,6 @@
 # QingChuan rag-service（qingchuan-rag）
 
-HRSS data offline indexing + RAG (Retrieval-Augmented Generation) integrated service.
+HRSS data offline indexing + RAG (Retrieval-Augmented Generation) integrated service platform.
 Make HRSS domain knowledge retrievable and answerable — ships an offline indexing pipeline and exposes retrieval & Q&A over HTTP + MCP dual protocols, adapted from the x-GuanHai engineering project.
 
 [中文](README.md) | English
@@ -24,7 +24,7 @@ Make HRSS domain knowledge retrievable and answerable — ships an offline index
 
 ## 💡 Project Introduction
 
-The HRSS data offline indexing + RAG integrated service of the QingChuan (x-QingChuan) project, listening on `:8010` by default. Core capabilities:
+The HRSS data offline indexing + RAG integrated service platform of the QingChuan (x-QingChuan) project, listening on `:8010` by default. Core capabilities:
 
 - **HTTP + MCP dual exit**: HTTP REST API (`/api/v1`) + MCP Streamable HTTP (`/mcp`), accessible by agents / IDEs / tools;
 - **HRSS offline sync**: built-in APScheduler periodic scheduling (`SYNC_CRON` defaults to 03:00 daily) + HTTP trigger endpoint + CLI (`qingchuan-pipeline`), syncing HRSS system data into the vector store (Chroma, Milvus optional) and business DB (MySQL);

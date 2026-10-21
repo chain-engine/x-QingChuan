@@ -198,13 +198,15 @@ class Retrieval:
         return formatted
 
     def get_vector_count(self) -> int:
-        """获取向量总数"""
+        """获取索引条目总数（多路候选 provider 求和，而非只取第一个）。"""
         self._check_initialized()
         stats = self._pipeline.get_stats()
         stats_info = stats.get("candidate_stats", {})
-        for stat in stats_info.values():
-            return stat.get("count", 0)
-        return 0
+        return sum(
+            stat.get("count", 0)
+            for stat in stats_info.values()
+            if isinstance(stat, dict)
+        )
 
     def _check_initialized(self) -> None:
         """检查是否已初始化"""

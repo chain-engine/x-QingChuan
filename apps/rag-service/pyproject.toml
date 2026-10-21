@@ -1,7 +1,7 @@
 [project]
 name = "qingchuan-rag"
 version = "0.2.0"
-description = "晴川 RAG 服务：HTTP + MCP 双协议，承载人社离线数据同步、语义检索与生成问答"
+description = "晴川 rag-service：人社（HRSS）数据离线索引 + RAG（检索增强生成）一体化服务平台"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -35,6 +35,8 @@ dependencies = [
   "langchain-openai>=0.2.0",
   "langchain",
   "langchain-text-splitters>=1.1.2",
+  # LlamaIndex 切分后端（llamaindex provider：sentence/token/semantic/markdown 策略）
+  "llama-index-core>=0.14.25",
   "openai>=1.0.0",
   "httpx>=0.25.0",
   # 业务数据库（审计 / 同步任务状态，MySQL；本地可 SQLite）
@@ -44,6 +46,8 @@ dependencies = [
   "apscheduler>=3.10,<4",
   "pymilvus>=2.4.0",
   "milvus-lite>=2.4.0",
+  "huggingface-hub>=0.24,<1",
+  "transformers>=4.41,<5",
 ]
 
 [tool.uv.sources]

@@ -88,10 +88,26 @@ class BM25Retriever(KeywordRetrievalProvider):
         return None
 
     def _tokenize(self, text: str) -> list[str]:
-        """简单中文分词（按字符级别，可替换为 jieba）"""
+        """轻量分词器（无词典，中文按双字 bigram 切分，与 infras.bm25 一致）。
+
+        - 英文 / 数字串：整词保留；
+        - 中文连续串：双字 bigram + 首尾单字补入，覆盖中文查询词级匹配。
+
+        背景：单纯 ``\\w+`` 会把整段连续中文匹配成单个 token，导致中文查询
+        无法命中任何文档（BM25 对中文检索失效）。
+        """
         import re
 
-        tokens = re.findall(r"[\w]+", text.lower())
+        tokens: list[str] = []
+        for chunk in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", text.lower()):
+            if re.fullmatch(r"[a-z0-9]+", chunk):
+                tokens.append(chunk)
+            elif len(chunk) == 1:
+                tokens.append(chunk)
+            else:
+                tokens.extend(chunk[i : i + 2] for i in range(len(chunk) - 1))
+                tokens.append(chunk[0])
+                tokens.append(chunk[-1])
         return tokens
 
     def index(self, documents: list[dict[str, Any]]) -> None:

@@ -41,7 +41,7 @@ class RAGQueryRequest(BaseModel):
         default=DEFAULT_SIMILARITY_THRESHOLD,
         ge=0.0,
         le=1.0,
-        description="相似度阈值，低于该值的文档被过滤，默认0.5",
+        description="相似度阈值，低于该值的文档被过滤，默认0.7",
         examples=[0.7],
     )
     use_mmr: bool = Field(

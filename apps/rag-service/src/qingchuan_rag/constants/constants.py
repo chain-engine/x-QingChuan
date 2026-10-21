@@ -27,9 +27,10 @@ DEFAULT_CONFIG_FILE: str = "config.yaml"
 # ====================================
 # 应用信息
 # ====================================
-APP_ID: str = "x-QingChuan"
-APP_NAME: str = "晴川（QingChuan）"
-APP_DESCRIPTION: str = "晴川（QingChuan）：一个基于人社平台的多 Agent 编排和知识库赋能平台"
+# ── 应用信息 ──────────────────────────────────────────
+APP_ID: str = "x-QingChuan RAG"
+APP_NAME: str = "晴川（QingChuan）RAG"
+APP_DESCRIPTION: str = "一个人社（HRSS）数据离线索引和RAG（检索增强生成）一体化服务平台"
 APP_VERSION: str = "0.1.0"
 API_PREFIX: Final[str] = "/api/v1"
 

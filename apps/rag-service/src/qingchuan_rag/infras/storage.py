@@ -72,6 +72,27 @@ class DocumentStoreBase(ABC):
         pass
 
     @abstractmethod
+    def list_page(
+        self,
+        skip: int = 0,
+        limit: int | None = None,
+        status: str | None = None,
+        file_type: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """存储层分页列出文档（过滤与分页在存储层完成，返回 (页内文档, 匹配总数)）。
+
+        Args:
+            skip: 跳过匹配数量
+            limit: 返回数量上限（None 表示不限制）
+            status: 按状态过滤
+            file_type: 按文件类型过滤
+
+        Returns:
+            tuple[list[dict[str, Any]], int]: (当前页文档列表, 匹配过滤条件的文档总数)
+        """
+        pass
+
+    @abstractmethod
     def get_stats(self) -> dict[str, Any]:
         """获取统计信息
 
@@ -185,6 +206,61 @@ class JSONDocumentStore(DocumentStoreBase):
             return documents
         except Exception as e:
             logger.error(f"列出文档失败: {e}")
+            raise DocumentError(f"列出文档失败: {e}") from e
+
+    def list_page(
+        self,
+        skip: int = 0,
+        limit: int | None = None,
+        status: str | None = None,
+        file_type: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """存储层分页列出文档（流式遍历 + 仅保留窗口，避免全量加载到内存）。
+
+        JSON 文件存储无法像 SQL 一样在索引层下推过滤/分页，仍需遍历全部文件
+        计算匹配总数；但相比"全量加载到内存再切片"，本实现只保留分页窗口内的
+        文档，内存占用 O(window) 而非 O(n)，服务层不再持有全量列表。
+        """
+        self._ensure_initialized()
+
+        matched_count = 0
+        page: list[dict[str, Any]] = []
+        failed_files: list[str] = []
+
+        try:
+            for file_path in self.storage_path.glob("*.json"):
+                try:
+                    with open(file_path, encoding="utf-8") as f:
+                        data = json.load(f)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"跳过无效的JSON文件 {file_path}: {e}")
+                    failed_files.append(str(file_path))
+                    continue
+                except PermissionError:
+                    logger.warning(f"跳过无权限访问的文件 {file_path}")
+                    failed_files.append(str(file_path))
+                    continue
+                except OSError as e:
+                    logger.warning(f"跳过无法读取的文件 {file_path}: {e}")
+                    failed_files.append(str(file_path))
+                    continue
+
+                if status is not None and data.get("status") != status:
+                    continue
+                if file_type is not None and data.get("file_type") != file_type:
+                    continue
+
+                matched_count += 1
+                # 只保留分页窗口内的文档，超出窗口仅计数不保留
+                if matched_count > skip and (limit is None or len(page) < limit):
+                    page.append(data)
+
+            if failed_files:
+                logger.warning(f"共跳过 {len(failed_files)} 个不可读文件: {failed_files[:5]}")
+
+            return page, matched_count
+        except Exception as e:
+            logger.error(f"分页列出文档失败: {e}")
             raise DocumentError(f"列出文档失败: {e}") from e
 
     def get_stats(self) -> dict[str, Any]:

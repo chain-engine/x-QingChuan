@@ -1,6 +1,6 @@
 # 晴川 agent-service（qingchuan-agent）
 
-LangGraph 多智能体编排运行时 + HTTP 服务。
+人机交互的多智能体编排平台。
 派活、编排、聚合 —— 顶层编排图执行 `route → subagent → aggregate`，新 Agent 注册即可扩展，经 MCP 工具调用 rag-service 完成检索问答。
 
 [English](README.en.md) | 中文
@@ -22,7 +22,7 @@ LangGraph 多智能体编排运行时 + HTTP 服务。
 
 ## 💡 项目介绍
 
-晴川（x-QingChuan）项目的 **LangGraph 多智能体编排运行时 + HTTP 服务**，默认监听 `:8020`，核心能力：
+晴川（x-QingChuan）项目的 **人机交互的多智能体编排平台**（LangGraph 编排运行时 + HTTP 服务），默认监听 `:8020`，核心能力：
 
 - **顶层编排图**：`route → subagent → aggregate` 三层结构；编译后的业务子图自动挂载为顶层图节点，新增 Agent 注册后无需改动图结构；
 - **三种路由模式**：`explicit`（注册表显式查表）/ `llm`（自然语言动态路由）/ `hybrid`（显式优先、LLM 兜底），由 RouteResolver 统一决策并落审计字段；

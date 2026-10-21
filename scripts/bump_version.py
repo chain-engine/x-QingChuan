@@ -2,7 +2,8 @@
 """晴川（x-QingChuan）workspace 单版本号发版脚本。
 
 VERSION 文件是仓库唯一的版本事实源；本脚本负责把该版本号
-联动写入 workspace 内全部 pyproject.toml 与各包 __init__.__version__，
+联动写入 workspace 内全部 pyproject.toml、各包 __init__.__version__
+与服务运行时常量 constants.APP_VERSION（/health 对外暴露的版本号），
 避免 domain / common / rag / agent 版本漂移。
 
 用法：
@@ -39,8 +40,15 @@ INIT_TARGETS = [
     ROOT / "apps" / "agent-service" / "src" / "qingchuan_agent" / "__init__.py",
 ]
 
+# 需要同步 APP_VERSION 的服务运行时常量（/health 与 FastAPI app 初始化读取）
+CONSTANTS_TARGETS = [
+    ROOT / "apps" / "agent-service" / "src" / "qingchuan_agent" / "constants" / "constants.py",
+    ROOT / "apps" / "rag-service" / "src" / "qingchuan_rag" / "constants" / "constants.py",
+]
+
 _PYPROJECT_RE = re.compile(r'^(version\s*=\s*")([^"]*)(")', re.MULTILINE)
 _INIT_RE = re.compile(r'(__version__\s*=\s*")([^"]*)(")')
+_CONSTANTS_RE = re.compile(r'^(APP_VERSION:\s*str\s*=\s*")([^"]*)(")', re.MULTILINE)
 
 
 def read_version() -> str:
@@ -90,6 +98,20 @@ def sync_init(version: str) -> list[Path]:
     return changed
 
 
+def sync_constants(version: str) -> list[Path]:
+    """把 version 写入各服务 constants.APP_VERSION，返回实际改动文件。"""
+    changed: list[Path] = []
+    for path in CONSTANTS_TARGETS:
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        new_text, count = _CONSTANTS_RE.subn(rf"\g<1>{version}\g<3>", text, count=1)
+        if count and new_text != text:
+            path.write_text(new_text, encoding="utf-8")
+            changed.append(path)
+    return changed
+
+
 def check_consistency() -> list[str]:
     """检查全部目标是否与 VERSION 一致，返回不一致项描述。"""
     expected = read_version()
@@ -106,6 +128,12 @@ def check_consistency() -> list[str]:
         match = _INIT_RE.search(path.read_text(encoding="utf-8"))
         if match is None or match.group(2) != expected:
             issues.append(f"{path.relative_to(ROOT)} 的 __version__ 与 VERSION 不一致")
+    for path in CONSTANTS_TARGETS:
+        if not path.exists():
+            continue
+        match = _CONSTANTS_RE.search(path.read_text(encoding="utf-8"))
+        if match is None or match.group(2) != expected:
+            issues.append(f"{path.relative_to(ROOT)} 的 APP_VERSION 与 VERSION 不一致")
     return issues
 
 
@@ -134,11 +162,14 @@ def main() -> int:
 
     changed_py = sync_pyproject(version)
     changed_init = sync_init(version)
+    changed_constants = sync_constants(version)
     for path in changed_py:
         print(f"  updated pyproject: {path.relative_to(ROOT)}")
     for path in changed_init:
         print(f"  updated __init__:  {path.relative_to(ROOT)}")
-    if not changed_py and not changed_init:
+    for path in changed_constants:
+        print(f"  updated constants: {path.relative_to(ROOT)}")
+    if not changed_py and not changed_init and not changed_constants:
         print("已一致，无改动")
     return 0
 

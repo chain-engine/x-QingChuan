@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 
-from qingchuan_rag.constants import HttpStatus
+from qingchuan_rag.constants import HttpStatus, APP_NAME, APP_DESCRIPTION, APP_VERSION
 from qingchuan_rag.core.config import settings
 from qingchuan_rag.core.exceptions import AppException
 from qingchuan_rag.core.logger import logger, setup_logging
@@ -166,9 +166,9 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """创建FastAPI应用"""
     app = FastAPI(
-        title=settings.APP_NAME,
-        description=settings.APP_DESCRIPTION,
-        version=settings.APP_VERSION,
+        title=APP_NAME,
+        description=APP_DESCRIPTION,
+        version=APP_VERSION,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",

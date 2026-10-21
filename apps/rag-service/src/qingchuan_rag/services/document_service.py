@@ -7,7 +7,7 @@ Document Service Module
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from qingchuan_rag.constants import DocStatus
@@ -162,8 +162,8 @@ class DocumentService(BaseService):
                     "file_type": file_type,
                     "file_size": file_size,
                     "status": DocStatus.PROCESSING.mark,
-                    "created_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                     "metadata": metadata,
                 }
             )
@@ -212,7 +212,7 @@ class DocumentService(BaseService):
                 {
                     "status": DocStatus.COMPLETED.mark,
                     "chunk_count": len(chunks),
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -441,22 +441,13 @@ class DocumentService(BaseService):
         if limit is not None and limit < 1:
             limit = None
 
-        documents = self._doc_repo.list_all()
-
-        if status:
-            documents = [doc for doc in documents if doc.get("status") == status]
-        if file_type:
-            documents = [doc for doc in documents if doc.get("file_type") == file_type]
-
-        total = len(documents)
-
-        if skip > 0 and skip < len(documents):
-            documents = documents[skip:]
-        elif skip >= len(documents):
-            documents = []
-
-        if limit is not None and limit > 0:
-            documents = documents[:limit]
+        # 过滤与分页下推到存储层：内存只保留当前页窗口，不再全量加载后切片
+        documents, total = self._doc_repo.list_page(
+            skip=skip,
+            limit=limit,
+            status=status,
+            file_type=file_type,
+        )
 
         result = {
             "documents": documents,

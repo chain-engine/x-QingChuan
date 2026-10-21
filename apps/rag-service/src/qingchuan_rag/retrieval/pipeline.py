@@ -322,6 +322,7 @@ class RetrievalPipeline:
 
         for provider in self._candidate_providers:
             provider_results: list[dict[str, Any]] = []
+            provider_seen: set[str] = set()
 
             for q in queries_to_search:
                 try:
@@ -334,8 +335,9 @@ class RetrievalPipeline:
                         if r.get("id") not in seen_ids:
                             seen_ids.add(r.get("id"))
                             all_results.append(r)
-                        # 收集该 provider 的结果用于 RRF
-                        if r.get("id") not in [x.get("id") for x in provider_results]:
+                        # 收集该 provider 的结果用于 RRF（set 去重，O(1) 判重）
+                        if r.get("id") not in provider_seen:
+                            provider_seen.add(r.get("id"))
                             provider_results.append(r)
                 except Exception as e:
                     logger.warning(f"Stage2 [{provider.name}] failed for '{q}': {e}")

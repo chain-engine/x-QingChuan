@@ -1,6 +1,6 @@
 # QingChuan（晴川）
 
-HRSS API offline indexing + RAG retrieval + Agent-powered Q&A platform.
+HRSS data offline indexing + RAG (Retrieval-Augmented Generation) + a human-interactive multi-agent orchestration platform (Phase 1 currently focuses on intelligent Q&A).
 Make government-domain knowledge searchable, answerable and orchestratable — built on HRSS data, exposed via dual-protocol (HTTP + MCP) services, and scheduled by LangGraph multi-agent orchestration.
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
@@ -24,153 +24,43 @@ Make government-domain knowledge searchable, answerable and orchestratable — b
 
 ## 💡 Project Introduction
 
-QingChuan is a **multi-agent orchestration + knowledge base empowerment platform** for HRSS (Human Resources & Social Security) business scenarios. It is structured as a uv monorepo with two independently deployable services and two shared packages:
+QingChuan is a **data offline indexing + RAG retrieval-augmented generation + human-interactive multi-agent orchestration platform** for HRSS (Human Resources & Social Security) business scenarios (Phase 1 currently focuses on intelligent Q&A). It is structured as a uv monorepo with two independently deployable services and two shared packages:
 
-- **rag-service（qingchuan-rag）**: integrated HRSS data offline indexing + RAG (Retrieval-Augmented Generation) service, exposing **HTTP + MCP dual protocols**; the offline indexing pipeline (CLI + APScheduler scheduled tasks) ships with the service;
-- **agent-service（qingchuan-agent）**: **LangGraph multi-agent orchestration runtime** + HTTP service; the top-level orchestration graph runs `route → subagent → aggregate`, and new agents register under `agents/` to extend; it calls rag-service via MCP tools and holds no index-write permission;
+- **rag-service（qingchuan-rag）**: an integrated service platform of HRSS data offline indexing + RAG (Retrieval-Augmented Generation), exposing **HTTP + MCP dual protocols**; the offline indexing pipeline (CLI + APScheduler scheduled tasks) ships with the service;
+- **agent-service（qingchuan-agent）**: a **human-interactive multi-agent orchestration platform** (LangGraph orchestration runtime + HTTP service); the top-level orchestration graph runs `route → subagent → aggregate`, and new agents register under `agents/` to extend; it calls rag-service via MCP tools and holds no index-write permission;
 - **packages/domain（qingchuan-domain）**: single source of truth for entities / schemas / retrieval protocols / ports, referenced directly by both services;
 - **packages/common（qingchuan-common）**: cross-service shared components (MCP client wrapper / auth / audit / observability, placeholder).
 
-**Current status**: the RAG retrieval pipeline runs end-to-end (HRSS sync supports mock-data integration); the Agent orchestration skeleton is delivered (new business agents extend via registration), and task/event persistence is disabled by default so the service can start without a database.
+**Current status**: Phase 1 focuses on intelligent Q&A — the RAG retrieval & Q&A chain runs end-to-end (HRSS sync supports mock integration and the Agent A Q&A chain is closed loop); the Agent orchestration skeleton is delivered (new business agents extend via registration), and task/event persistence is disabled by default so the service can start without a database.
 
 ## 🚀 Quick Start
 
-### 🖥️ 1. Prerequisites
-
-- **Windows / Linux / macOS** all supported; Python 3.12+ required (`requires-python = ">=3.12,<3.14"`);
-- **uv** package manager (required for workspace dependency sync): <https://docs.astral.sh/uv/>;
-- **Docker / Docker Compose** (needed for container deployment; optional for local development);
-- **MySQL 8.0** (recommended for production; local development can start without a database or use SQLite, and agent-service persistence is disabled by default).
-
-### 📥 2. Clone the Repository
+### 🖥️ rag-service (HRSS data offline indexing + RAG integrated service)
 
 ```bash
-git clone https://github.com/chain-engine/x-QingChuan.git
-cd x-QingChuan
+cd apps/rag-service
+uv run qingchuan-rag-api
 ```
 
-### 📦 3. Install Dependencies
+Access <http://127.0.0.1:8010> (MCP mounted at /mcp). See [rag-service/README.en.md](apps/rag-service/README.en.md).
+
+### 🤖 agent-service (human-interactive multi-agent orchestration platform)
 
 ```bash
-uv lock                 # first run: generate the lockfile
-uv sync --all-packages  # install all workspace members (apps/* and packages/*)
+cd apps/agent-service
+uv run qingchuan-agent-api
 ```
 
-### ⚙️ 4. Environment Configuration
+Access <http://127.0.0.1:8020>. See [agent-service/README.en.md](apps/agent-service/README.en.md).
 
-Copy the example files and adjust as needed (key parameters below):
-
-```bash
-# rag-service: both .env and config.yaml are supported
-cp apps/rag-service/.env.example apps/rag-service/.env
-# or
-cp apps/rag-service/config.yaml.example apps/rag-service/config.yaml
-
-# agent-service: configured via .env at the repo root (prefix QINGCHUAN_AGENT_)
-```
-
-| Parameter | Default | Description |
-| --- | --- | --- |
-| `DATABASE_URL` | `mysql+pymysql://yeyushilai:123456@localhost:3306/qingchuan` | rag-service business database (audit / sync tasks); SQLite works locally |
-| `SYNC_ENABLED` / `SYNC_CRON` | `false` / `0 3 * * *` | HRSS periodic sync toggle and cron expression |
-| `HRSS_API_URL` / `HRSS_API_TOKEN` | empty | HRSS data source URL and Bearer token (required in production) |
-| `HRSS_MOCK` | `true` | mock mode: uses local sample data for end-to-end integration without a real API |
-| `EMBEDDING_MODEL` | `BAAI/bge-m3` | embedding model (local offline inference) |
-| `VECTOR_STORE_PERSIST_DIR` | `./data/chroma` | Chroma vector store persistence directory |
-| `GENERATION_PROVIDER` / `GENERATION_MODEL` | `mimo` / `mimo-v2.6-pro` | **rag-service only** generation model; supports DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
-| `QINGCHUAN_AGENT_AI_LLM_API_KEY` | empty (Mock) | **agent-service only** LLM API key (independent of rag-service's `MIMO_*`) |
-| `QINGCHUAN_AGENT_AI_LLM_BASE_URL` | empty | agent-service LLM base URL (OpenAI-compatible, e.g. `https://api.xiaomimimo.com/v1`) |
-| `QINGCHUAN_AGENT_AI_LLM_MODEL` | `deepseek-chat` | agent-service model name (e.g. `mimo-v2.6-pro`); edit only these three variables to switch provider |
-| `QINGCHUAN_AGENT_DATABASE_ENABLED` | `false` | agent-service task/event persistence toggle (auto-creates tables on first start) |
-| `QINGCHUAN_AGENT_RAG_HTTP_BASE_URL` | `http://rag-service:8010` | rag client base URL used by agent-service (use `http://127.0.0.1:8010` locally) |
-
-> **LLM config separation**: the LLM for agent-service and rag-service are configured independently and never read each other's variables.
-> rag-service reads `MIMO_*` / `GENERATION_*`; agent-service only reads `QINGCHUAN_AGENT_AI_LLM_*`
-> (two-level nested fields require explicit reload in core/config.py; both OS env and .env are supported, OS takes precedence).
-> To switch provider for either service, edit only its own block.
-
-### 🚀 5. Start the Services
-
-**Local development with hot reload**:
-
-```bash
-# rag-service: HTTP service (default 0.0.0.0:8010; MCP is mounted at /mcp)
-uv run --package qingchuan-rag qingchuan-rag-api
-# or
-uv run --package qingchuan-rag uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
-
-# agent-service: HTTP service (default 127.0.0.1:8020)
-uv run --package qingchuan-agent qingchuan-agent-api
-# or
-uv run --package qingchuan-agent uvicorn qingchuan_agent.main:app --reload --host 127.0.0.1 --port 8020
-
-# agent-service: orchestration demo (skeleton placeholder; verifies registry / routing / runtime)
-uv run --package qingchuan-agent qingchuan-agent
-```
-
-**Docker container deployment**:
-
-```bash
-docker compose up --build
-```
-
-### 🧪 6. Common Engineering Commands
-
-```bash
-uv run ruff check .            # static code check
-uv run ruff format .           # code formatting
-uv run pytest                  # unit tests (run inside the rag-service directory)
-pre-commit run --all-files     # pre-commit hooks (ruff --fix + ruff-format)
-uv audit                       # dependency vulnerability scan (built into uv 0.5+)
-```
-
-### 💬 7. Usage Examples
-
-**RAG query & answer (rag-service HTTP)**:
-
-```bash
-curl -X POST http://127.0.0.1:8010/api/v1/rag/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How is the social insurance contribution base determined?"}'
-```
-
-**Trigger an HRSS data sync**:
-
-```bash
-uv run --package qingchuan-rag qingchuan-pipeline sync --full
-# or via HTTP
-curl -X POST http://127.0.0.1:8010/api/v1/sync/trigger \
-  -H "Content-Type: application/json" \
-  -d '{"full": true}'
-```
-
-**MCP retrieval**: see `apps/rag-service/scripts/qingchuan_mcp_client.py` for the MCP client example; see `apps/rag-service/scripts/qingchuan_http_client.py` for the HTTP client example.
-
-**Submit an Agent task (agent-service)**:
-
-```bash
-curl -X POST http://127.0.0.1:8020/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"task_type": "agent_a", "payload": {"query": "..."}}'
-```
-
-### ❓ 8. Troubleshooting
-
-| Symptom | Solution |
-| --- | --- |
-| Port already in use | Change `SERVER_PORT` (rag-service) or `QINGCHUAN_AGENT_SERVER_PORT` (agent-service) |
-| `uv` install fails / times out | Check the network; rag-service ships with the Aliyun PyPI mirror, or add `[tool.uv.index]` to the root `pyproject.toml` |
-| torch reports `shm.dll` missing on Windows | Keep the pinned `torch==2.12.0`; do not upgrade to 2.14.x |
-| Database connection failure | Confirm MySQL is running and the database is created (`utf8mb4`); agent-service can start without a DB by disabling `QINGCHUAN_AGENT_DATABASE_ENABLED` |
-| HRSS sync returns 401 / times out | Keep `HRSS_MOCK=true` during integration; for the real API, configure `HRSS_API_URL` / `HRSS_API_TOKEN` and disable mock |
-| Startup fails with a config error | Invalid config blocks startup (validate); in production, DEBUG / `*` CORS / memory checkpoint are rejected |
+> **One-command Docker deployment**: `docker compose up --build`. For prerequisites, dependency sync (`uv sync --all-packages`) and environment configuration, see each service README above.
 
 ## 📁 Project Structure
 
 ```text
 x-QingChuan/
 ├── apps/
-│   ├── agent-service/                  # Agent orchestration runtime + HTTP service (standalone, :8020)
+│   ├── agent-service/                  # Human-interactive multi-agent orchestration platform (standalone, :8020)
 │   │   ├── src/qingchuan_agent/
 │   │   │   ├── main.py                 # FastAPI entry (lifespan / middleware / exceptions / routes)
 │   │   │   ├── cli.py                  # CLI: qingchuan-agent (demo) / qingchuan-agent-api
@@ -187,7 +77,7 @@ x-QingChuan/
 │   │   │   └── utils/                  # Utilities (IP extraction / masking)
 │   │   ├── Dockerfile
 │   │   └── pyproject.toml              # qingchuan-agent
-│   └── rag-service/                    # RAG service: HTTP + MCP dual protocol (standalone, :8010)
+│   └── rag-service/                    # HRSS data offline indexing + RAG integrated service platform (standalone, :8010)
 │       ├── src/qingchuan_rag/
 │       │   ├── main.py                 # FastAPI entry (HTTP routes + /mcp Streamable HTTP)
 │       │   ├── cli.py                  # CLI: qingchuan-rag-api / qingchuan-pipeline
@@ -345,100 +235,9 @@ flowchart LR
 | Engineering | ruff + pre-commit + pytest (pytest-asyncio / pytest-cov) |
 | Deployment | Docker / Docker Compose |
 
-## 📡 API Documentation
-
-Both services enable **Swagger interactive docs / ReDoc read-only docs / OpenAPI JSON**:
-
-| Service | Swagger | ReDoc | OpenAPI JSON | MCP endpoint |
-| --- | --- | --- | --- | --- |
-| rag-service (:8010) | <http://127.0.0.1:8010/docs> | <http://127.0.0.1:8010/redoc> | <http://127.0.0.1:8010/openapi.json> | <http://127.0.0.1:8010/mcp> (Streamable HTTP) |
-| agent-service (:8020) | <http://127.0.0.1:8020/docs> | <http://127.0.0.1:8020/redoc> | <http://127.0.0.1:8020/openapi.json> | — (calls rag-service via MCP client) |
-
-### 📋 Core API List
-
-**agent-service (/api/v1, 9 endpoints)**:
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/health` | Health check (incl. DB / Agent runtime status) |
-| GET | `/api/v1/version` | Version info |
-| GET | `/api/v1/agents/specs` | Registered agent specs |
-| POST | `/api/v1/tasks` | Submit an Agent task (explicit task_type routing / empty → LLM dynamic routing) |
-| GET | `/api/v1/tasks` | Task list (paginated) |
-| GET | `/api/v1/tasks/{id}` | Task detail |
-| POST | `/api/v1/tasks/{id}/resume` | Human takeover: resume an interrupted task |
-| GET | `/api/v1/events` | Collaboration event list (paginated) |
-| GET | `/api/v1/events/{id}` | Event detail |
-
-**rag-service (/api/v1, core subset)**:
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/v1/health` / `/version` / `/status` | Health / version / system status |
-| POST | `/api/v1/rag/query` | RAG Q&A (retrieve + generate) |
-| POST | `/api/v1/rag/retrieve` | Text retrieval only (no generation; returns chunks & sources) |
-| POST | `/api/v1/rag/embed` | Embed text |
-| GET | `/api/v1/rag/stats` | RAG system statistics |
-| POST | `/api/v1/documents/upload` | Upload a document and index it automatically |
-| GET | `/api/v1/documents` | Document list (paginated) |
-| GET | `/api/v1/documents/{document_id}` | Document detail |
-| DELETE | `/api/v1/documents/{document_id}` | Delete a document and its vectors |
-| GET | `/api/v1/documents/{document_id}/status` | Document processing status |
-| POST | `/api/v1/sync/trigger` | Trigger an HRSS sync (incremental by default; `full=true` for full) |
-| GET | `/api/v1/sync/status` | Latest sync status |
-| GET | `/api/v1/sync/status/{task_id}` | Sync task status by ID |
-| GET | `/api/v1/audit/logs` | Audit log list (paginated) |
-| GET | `/api/v1/audit/logs/{log_id}` | Audit log detail |
-
-**MCP tools (rag-service, read-only)**:
-
-| Tool | Description |
-| --- | --- |
-| `retrieve_docs` | Retrieve knowledge chunks most relevant to a query (supports top_k / similarity threshold / MMR / metadata filter) |
-| `rag_query` | Generate a complete answer from the knowledge base (retrieve → augment → generate), returns answer and cited chunks |
-
-### 🔐 Permission & Access Control
-
-- **agent-service**: the tool center follows the principle of "read-only tools are directly callable, write operations require human execution"; task routing supports explicit / llm / hybrid modes; production (`APP_ENV=production`) enforces validation — DEBUG forbidden, CORS whitelist cannot be `*`, checkpoint must be redis;
-- **rag-service**: built-in slowapi rate limiting (`RATE_LIMIT_ENABLED` / per-minute / per-hour quotas); all write operations (document upload / delete, sync trigger) are written to audit logs with the fixed operator `internal`; audit endpoints are read-only.
-
-## 💾 Storage Configuration
-
-| Storage | Purpose | Config parameters | Notes |
-| --- | --- | --- | --- |
-| MySQL 8.0 | rag-service: audit logs / sync task status; agent-service: Agent tasks / events | `DATABASE_URL` / `QINGCHUAN_AGENT_DATABASE_*` | Required in production; SQLite or no-DB works locally (agent-service disabled by default) |
-| Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_PERSIST_DIR=./data/chroma`, `VECTOR_STORE_COLLECTION_NAME`, `VECTOR_STORE_DISTANCE` | Persisted at `apps/rag-service/data/chroma` |
-| BM25 index | Sparse retrieval index (keyword matching) | `./data/bm25/documents.json` | Built automatically with document indexing |
-| Document storage | Uploaded source documents | `./data/documents` | DocumentRepository storage path |
-| Log files | loguru file rotation | `LOG_FILE_PATH` / `QINGCHUAN_AGENT_LOGGING_FILE_PATH` | Rotation 1 day / retention 7 days / zip compression |
-
-Data structure definitions (ORM entities):
-
-- **rag-service**: `audit_logs` (operator / action / target / result / timestamp), `sync_tasks` (type / status / batch / success-failure counts);
-- **agent-service**: `agent_tasks` (task_type / payload / status / result / error / thread ID), `agent_events` (event type / payload / related task).
-
 ## 📄 License
 
 [MIT License](LICENSE) © 2026 ChainEngine
-
-## 📚 References
-
-- Python: <https://www.python.org/>
-- uv: <https://docs.astral.sh/uv/>
-- FastAPI: <https://fastapi.tiangolo.com/>
-- Uvicorn: <https://www.uvicorn.org/>
-- LangGraph: <https://langchain-ai.github.io/langgraph/>
-- LangChain: <https://python.langchain.com/>
-- MCP (Model Context Protocol): <https://modelcontextprotocol.io/>
-- ChromaDB: <https://docs.trychroma.com/>
-- sentence-transformers: <https://www.sbert.net/>
-- rank-bm25: <https://github.com/dorianbrown/rank_bm25>
-- SQLAlchemy: <https://www.sqlalchemy.org/>
-- PyMySQL: <https://pymysql.readthedocs.io/>
-- APScheduler: <https://apscheduler.readthedocs.io/>
-- pydantic: <https://docs.pydantic.dev/>
-- loguru: <https://loguru.readthedocs.io/>
-- Docker: <https://docs.docker.com/>
 
 ## 📮 Contact
 

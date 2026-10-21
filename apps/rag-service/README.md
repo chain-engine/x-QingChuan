@@ -1,6 +1,6 @@
 # 晴川 rag-service（qingchuan-rag）
 
-人社（HRSS）数据离线索引 + RAG（检索增强生成）一体化服务。
+人社（HRSS）数据离线索引 + RAG（检索增强生成）一体化服务平台。
 人社领域知识，检索可答 —— 内置离线同步流水线，对外提供 HTTP + MCP 双协议检索与问答能力，由观海（x-GuanHai）工程改造而来。
 
 [English](README.en.md) | 中文
@@ -24,7 +24,7 @@
 
 ## 💡 项目介绍
 
-晴川（x-QingChuan）项目的人社数据离线索引 + RAG 一体化服务，默认监听 `:8010`，核心能力：
+晴川（x-QingChuan）项目的人社数据离线索引 + RAG 一体化服务平台，默认监听 `:8010`，核心能力：
 
 - **HTTP + MCP 双出口**：HTTP REST API（`/api/v1`）+ MCP Streamable HTTP（`/mcp`），Agent / IDE / 工具均可接入；
 - **人社数据离线同步**：内置 APScheduler 周期调度（`SYNC_CRON` 默认每日 03:00）+ HTTP 触发接口 + CLI（`qingchuan-pipeline`），将人社系统数据周期同步进向量库（Chroma，可选 Milvus）与业务库（MySQL）；

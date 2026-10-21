@@ -77,6 +77,7 @@ class CORSConfig:
 
     enabled: bool = True
     allow_origins: list[str] = field(default_factory=lambda: ["*"])
+    allow_credentials: bool = True
     allow_methods: list[str] = field(
         default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     )
@@ -252,6 +253,7 @@ class Settings:
             "cors": {
                 "enabled": True,
                 "allow_origins": ["*"],
+                "allow_credentials": True,
                 "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
                 "allow_headers": ["*"],
             },
@@ -400,6 +402,7 @@ class Settings:
             "RATE_LIMIT_REQUESTS_PER_HOUR": ("rate_limit", "requests_per_hour", int),
             "CORS_ENABLED": ("cors", "enabled", lambda v: v.lower() == "true"),
             "CORS_ALLOW_ORIGINS": ("cors", "allow_origins", str),
+            "CORS_ALLOW_CREDENTIALS": ("cors", "allow_credentials", lambda v: v.lower() == "true"),
             "CORS_ALLOW_METHODS": ("cors", "allow_methods", str),
             "CORS_ALLOW_HEADERS": ("cors", "allow_headers", str),
             # 业务数据库（审计日志等）

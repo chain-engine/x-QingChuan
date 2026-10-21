@@ -95,6 +95,25 @@ class VectorStoreBase(ABC):
         pass
 
     @abstractmethod
+    def get_by_metadata(
+        self,
+        metadata_filter: dict[str, Any],
+        include: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """按元数据等值条件获取向量（如 {"document_id": "doc_001"}）。
+
+        用于"按文档取 chunks"等管理面查询，不构造查询向量、不做相似度检索。
+
+        Args:
+            metadata_filter: 元数据过滤条件（等值匹配）
+            include: 返回字段（实现相关；默认返回 documents + metadatas）
+
+        Returns:
+            list[dict[str, Any]]: [{id, text, metadata}, ...]
+        """
+        pass
+
+    @abstractmethod
     def get_count(self) -> int:
         """获取向量总数
 
@@ -271,6 +290,39 @@ class ChromaVectorStore(VectorStoreBase):
         except Exception as e:
             logger.error(f"Failed to delete vectors by metadata: {e}")
             raise VectorStoreError(f"Failed to delete vectors by metadata: {e}") from e
+
+    def get_by_metadata(
+        self,
+        metadata_filter: dict[str, Any],
+        include: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """按元数据等值条件获取向量（Chroma collection.get(where=...)，无 top_k 上限）。"""
+        self._ensure_initialized()
+        if not metadata_filter:
+            return []
+        try:
+            if include is None:
+                include = ["documents", "metadatas"]
+            results = self._collection.get(where=metadata_filter, include=include)
+            if not results or not results.get("ids"):
+                return []
+
+            formatted: list[dict[str, Any]] = []
+            ids = results.get("ids", [])
+            documents = results.get("documents", [])
+            metadatas = results.get("metadatas", [])
+            for i, doc_id in enumerate(ids):
+                formatted.append(
+                    {
+                        "id": doc_id,
+                        "text": documents[i] if i < len(documents) else "",
+                        "metadata": metadatas[i] if i < len(metadatas) else {},
+                    }
+                )
+            return formatted
+        except Exception as e:
+            logger.error(f"Failed to get vectors by metadata: {e}")
+            raise VectorStoreError(f"Failed to get vectors by metadata: {e}") from e
 
     def get_count(self) -> int:
         """获取向量总数"""
@@ -472,6 +524,42 @@ class MilvusVectorStore(VectorStoreBase):
         except Exception as e:
             logger.error(f"Failed to delete vectors by metadata in Milvus: {e}")
             raise VectorStoreError(f"Failed to delete vectors by metadata in Milvus: {e}") from e
+
+    def get_by_metadata(
+        self,
+        metadata_filter: dict[str, Any],
+        include: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """按元数据等值条件获取向量（Milvus query，filter 表达式等值匹配）。"""
+        self._ensure_initialized()
+        try:
+            if not self._client.has_collection(self.collection_name):
+                return []
+            filter_expr = self._build_filter_expr(metadata_filter)
+            if not filter_expr:
+                return []
+            # output_fields=["*"]：返回全部字段（含 text 与动态元数据字段）
+            results = self._client.query(
+                self.collection_name,
+                filter=filter_expr,
+                output_fields=["*"],
+            )
+            formatted: list[dict[str, Any]] = []
+            for entity in results or []:
+                metadata = {
+                    k: v for k, v in entity.items() if k not in ("id", "text", "vector")
+                }
+                formatted.append(
+                    {
+                        "id": str(entity.get("id", "")),
+                        "text": entity.get("text", ""),
+                        "metadata": metadata,
+                    }
+                )
+            return formatted
+        except Exception as e:
+            logger.error(f"Failed to get vectors by metadata in Milvus: {e}")
+            raise VectorStoreError(f"Failed to get vectors by metadata in Milvus: {e}") from e
 
     def get_count(self) -> int:
         """获取向量总数"""

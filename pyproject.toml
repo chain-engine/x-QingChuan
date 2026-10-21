@@ -1,7 +1,7 @@
 [project]
 name = "x-qingchuan"
 version = "0.2.0"
-description = "晴川（x-QingChuan）：人社 API 离线索引 + RAG 检索 + Agent 智能问答（HTTP + MCP 双服务）"
+description = "晴川（x-QingChuan）：人社数据离线索引 + RAG 检索增强生成 + 人机交互多 Agent 编排平台（第一期聚焦智能问答）"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = []

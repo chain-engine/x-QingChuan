@@ -1,6 +1,6 @@
 # QingChuan agent-service（qingchuan-agent）
 
-LangGraph multi-agent orchestration runtime + HTTP service.
+A human-interactive multi-agent orchestration platform.
 Dispatch, orchestrate, aggregate — the top-level graph runs `route → subagent → aggregate`, new agents extend via registration, and RAG Q&A is fulfilled by calling rag-service through MCP tools.
 
 [中文](README.md) | English
@@ -22,7 +22,7 @@ Dispatch, orchestrate, aggregate — the top-level graph runs `route → subagen
 
 ## 💡 Project Introduction
 
-The **LangGraph multi-agent orchestration runtime + HTTP service** of the QingChuan (x-QingChuan) project, listening on `:8020` by default. Core capabilities:
+The **human-interactive multi-agent orchestration platform** (LangGraph orchestration runtime + HTTP service) of the QingChuan (x-QingChuan) project, listening on `:8020` by default. Core capabilities:
 
 - **Top-level orchestration graph**: `route → subagent → aggregate` three-layer structure; compiled business subgraphs are automatically mounted as top-level graph nodes — registering a new agent requires no graph changes;
 - **Three routing modes**: `explicit` (registry table lookup) / `llm` (natural-language dynamic routing) / `hybrid` (explicit first, LLM fallback), decided by RouteResolver and written to audit fields;
