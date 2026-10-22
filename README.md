@@ -102,7 +102,7 @@ x-QingChuan/
 │   │   └── src/qingchuan_common/
 │   └── domain/                         # 共享领域包（实体 / Schema / 检索协议 / 端口，唯一事实来源）
 │       └── src/qingchuan_domain/
-├── docker-compose.yml                  # 一键编排 rag-service + agent-service
+├── docker-compose.yml                  # 一键独立部署 mysql + redis + rag-service + agent-service
 ├── pyproject.toml                      # uv 工作区根（members：apps/*、packages/*）
 ├── .env                                # 环境配置（不入库）
 ├── .pre-commit-config.yaml             # pre-commit 钩子（ruff）
@@ -213,7 +213,7 @@ flowchart LR
 | 配置 | pydantic-settings / pydantic + PyYAML | 分段带前缀配置；非法配置阻断启动 |
 | 日志 | loguru | 彩色控制台 / 文件轮转（1 天 / 保留 7 天） |
 | 工程化 | uv + ruff + pre-commit + pytest | 工作区依赖、静态检查、测试 |
-| 部署 | Docker Compose | 一键编排 rag-service + agent-service |
+| 部署 | Docker Compose | 一键独立部署 MySQL + Redis + 双服务（内部网络，不依赖宿主机） |
 
 ## 🛠️ 技术栈
 
