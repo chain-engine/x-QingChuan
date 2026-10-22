@@ -1,290 +1,415 @@
 #!/usr/bin/env python3
 """
-Storage Module
+存储抽象层（Storage Abstraction Layer）— 文档内容对象存储
 
-文档存储基础设施：抽象基类 + JSON 文件实现
+提供统一的文件存储接口，业务代码不关心底层存储实现：
+    - LocalStorage：本地文件系统（开发 / 单机生产默认，锚定服务根 data 目录）
+    - S3CompatibleStorage：S3 兼容对象存储（MinIO / 阿里云 OSS / 腾讯 COS / 七牛 Kodo，
+      生产环境推荐），经 boto3 访问
+
+通过配置切换实现，业务代码零改动：
+
+    storage:
+      provider: "local"        # local | s3
+
+      local:
+        base_dir: "./data/documents"     # 相对路径自动锚定 apps/rag-service/data
+        public_prefix: "/files"
+      s3:
+        endpoint_url: "http://minio:9000"
+        access_key: ""
+        secret_key: ""
+        bucket: "qingchuan"
+        region: ""
+        prefix: "documents"
+        public_url: ""          # 可选：公开访问域名（含协议头）
+        use_ssl: false
+
+环境变量：STORAGE_PROVIDER / STORAGE_LOCAL_BASE_DIR / STORAGE_S3_*（见 core/config.py）
+
+Usage:
+    from qingchuan_rag.infras.storage import get_cached_storage_provider
+    provider = get_cached_storage_provider()
+    result = provider.upload_file(file_bytes, "documents/xx.txt", content_type="text/plain")
+    url = provider.get_download_url("documents/xx.txt")
 """
 
-import json
-from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
 
-from qingchuan_rag.core.exceptions import DocumentError
+import hashlib
+import os
+from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, BinaryIO
+
 from qingchuan_rag.core.logger import logger
 from qingchuan_rag.core.paths import resolve_service_path
 
 
-class DocumentStoreBase(ABC):
-    """文档存储基类
+# ============================================================
+# 统一返回结构
+# ============================================================
+class UploadResult:
+    """上传结果，所有 provider 返回同一结构。"""
 
-    定义文档存储的标准接口
+    __slots__ = ("key", "url", "size", "storage", "content_type")
+
+    def __init__(
+        self,
+        key: str,
+        url: str,
+        size: int,
+        storage: str,
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        self.key = key
+        self.url = url
+        self.size = size
+        self.storage = storage
+        self.content_type = content_type
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "url": self.url,
+            "size": self.size,
+            "storage": self.storage,
+            "content_type": self.content_type,
+        }
+
+
+# ============================================================
+# 抽象基类
+# ============================================================
+class StorageProvider(ABC):
+    """存储提供者抽象接口。
+
+    所有存储后端必须实现此接口；业务层仅依赖此抽象，
+    切换存储实现只需修改配置，无需改动任何业务代码。
     """
 
-    @abstractmethod
-    def initialize(self) -> None:
-        """初始化文档存储"""
-        pass
+    #: 存储后端标识（local / s3），供统计与诊断使用
+    storage_type: str = "unknown"
 
     @abstractmethod
-    def shutdown(self) -> None:
-        """关闭文档存储"""
-        pass
-
-    @abstractmethod
-    def save(self, document_id: str, data: dict[str, Any]) -> None:
-        """保存文档
-
-        Args:
-            document_id: 文档ID
-            data: 文档数据
-        """
-        pass
-
-    @abstractmethod
-    def load(self, document_id: str) -> dict[str, Any] | None:
-        """加载文档
-
-        Args:
-            document_id: 文档ID
-
-        Returns:
-            dict[str, Any] | None: 文档数据
-        """
-        pass
-
-    @abstractmethod
-    def delete(self, document_id: str) -> None:
-        """删除文档
-
-        Args:
-            document_id: 文档ID
-        """
-        pass
-
-    @abstractmethod
-    def list_all(self) -> list[dict[str, Any]]:
-        """列出所有文档
-
-        Returns:
-            list[dict[str, Any]]: 文档列表
-        """
-        pass
-
-    @abstractmethod
-    def list_page(
+    def upload_file(
         self,
-        skip: int = 0,
-        limit: int | None = None,
-        status: str | None = None,
-        file_type: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int]:
-        """存储层分页列出文档（过滤与分页在存储层完成，返回 (页内文档, 匹配总数)）。
+        data: bytes | BinaryIO,
+        key: str,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> UploadResult:
+        """上传文件。
 
         Args:
-            skip: 跳过匹配数量
-            limit: 返回数量上限（None 表示不限制）
-            status: 按状态过滤
-            file_type: 按文件类型过滤
+            data: 文件内容（bytes 或可读的文件对象）
+            key: 存储路径键，如 "documents/xx.txt"
+            content_type: MIME 类型
 
         Returns:
-            tuple[list[dict[str, Any]], int]: (当前页文档列表, 匹配过滤条件的文档总数)
+            UploadResult: 上传结果（含 key、url、size、storage 类型）
         """
-        pass
 
     @abstractmethod
-    def get_stats(self) -> dict[str, Any]:
-        """获取统计信息
+    def get_download_url(self, key: str, *, expires: int = 3600) -> str:
+        """获取文件下载 URL。
+
+        本地存储返回相对路径（由静态文件中间件服务）；
+        S3 兼容存储返回带签名的临时 URL。
+
+        Args:
+            key: 存储路径键
+            expires: 签名有效期（秒），仅云存储有效
 
         Returns:
-            dict[str, Any]: 统计信息
+            str: 可访问的 URL 或相对路径
         """
-        pass
+
+    @abstractmethod
+    def delete_file(self, key: str) -> bool:
+        """删除文件。
+
+        Args:
+            key: 存储路径键
+
+        Returns:
+            bool: 删除是否成功
+        """
+
+    @abstractmethod
+    def file_exists(self, key: str) -> bool:
+        """判断文件是否存在。
+
+        Args:
+            key: 存储路径键
+
+        Returns:
+            bool: 文件是否存在
+        """
+
+    def make_object_key(self, folder: str, filename: str) -> str:
+        """生成唯一的对象存储键。
+
+        使用 时间戳+SHA1 保证唯一性，避免文件名冲突。
+
+        Args:
+            folder: 目录前缀，如 "documents"
+            filename: 原始文件名
+
+        Returns:
+            str: 唯一的存储键
+        """
+        safe_name = os.path.basename(filename)
+        stem, ext = os.path.splitext(safe_name)
+        digest = hashlib.sha1(f"{datetime.now(UTC).isoformat()}:{safe_name}".encode()).hexdigest()[:12]
+        unique_name = f"{stem}-{digest}{ext}"
+        folder_clean = folder.strip("/")
+        if folder_clean:
+            return f"{folder_clean}/{unique_name}"
+        return unique_name
 
 
-class JSONDocumentStore(DocumentStoreBase):
-    """JSON文件文档存储实现"""
+# ============================================================
+# 本地文件系统实现
+# ============================================================
+class LocalStorage(StorageProvider):
+    """本地文件系统存储。
 
-    def __init__(self, storage_path: str = "./data/documents"):
-        # 相对路径锚定到服务根目录（apps/rag-service/data），避免随 CWD 漂移写入仓库根目录
-        self.storage_path = Path(resolve_service_path(storage_path))
-        self._initialized = False
+    文件保存在服务数据目录（apps/rag-service/data/<base_dir>，相对路径自动锚定），
+    适合开发与单机生产；通过 FastAPI StaticFiles 中间件提供静态访问（public_prefix）。
+    """
 
-    def initialize(self) -> None:
-        """初始化存储目录"""
-        if self._initialized:
-            return
-
-        try:
-            self.storage_path.mkdir(parents=True, exist_ok=True)
-            self._initialized = True
-            logger.info(f"JSONDocumentStore initialized: path={self.storage_path}")
-        except Exception as e:
-            logger.error(f"Failed to initialize JSONDocumentStore: {e}")
-            raise DocumentError(f"Failed to initialize: {e}") from e
-
-    def shutdown(self) -> None:
-        """关闭存储"""
-        self._initialized = False
-        logger.info("JSONDocumentStore shut down")
-
-    def _get_file_path(self, document_id: str) -> Path:
-        """获取文档文件路径"""
-        return self.storage_path / f"{document_id}.json"
-
-    def save(self, document_id: str, data: dict[str, Any]) -> None:
-        """保存文档到JSON文件"""
-        self._ensure_initialized()
-
-        try:
-            file_path = self._get_file_path(document_id)
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            logger.debug(f"Saved document: {document_id}")
-        except Exception as e:
-            logger.error(f"Failed to save document {document_id}: {e}")
-            raise DocumentError(f"Failed to save document: {e}") from e
-
-    def load(self, document_id: str) -> dict[str, Any] | None:
-        """从JSON文件加载文档"""
-        self._ensure_initialized()
-
-        try:
-            file_path = self._get_file_path(document_id)
-            if not file_path.exists():
-                return None
-
-            with open(file_path, encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            logger.error(f"文档 {document_id} 解析失败：无效的JSON格式: {e}")
-            raise DocumentError(f"文档 {document_id} 格式无效: {e}") from e
-        except PermissionError as e:
-            logger.error(f"读取文档 {document_id} 权限不足: {e}")
-            raise DocumentError(f"读取文档 {document_id} 权限不足") from e
-        except OSError as e:
-            logger.error(f"加载文档 {document_id} 失败: {e}")
-            raise DocumentError(f"加载文档 {document_id} 失败: {e}") from e
-
-    def delete(self, document_id: str) -> None:
-        """删除文档文件"""
-        self._ensure_initialized()
-
-        try:
-            file_path = self._get_file_path(document_id)
-            if file_path.exists():
-                file_path.unlink()
-                logger.debug(f"Deleted document: {document_id}")
-        except Exception as e:
-            logger.error(f"Failed to delete document {document_id}: {e}")
-            raise DocumentError(f"Failed to delete document: {e}") from e
-
-    def list_all(self) -> list[dict[str, Any]]:
-        """列出所有文档"""
-        self._ensure_initialized()
-
-        documents = []
-        failed_files = []
-        try:
-            for file_path in self.storage_path.glob("*.json"):
-                try:
-                    with open(file_path, encoding="utf-8") as f:
-                        documents.append(json.load(f))
-                except json.JSONDecodeError as e:
-                    logger.warning(f"跳过无效的JSON文件 {file_path}: {e}")
-                    failed_files.append(str(file_path))
-                except PermissionError:
-                    logger.warning(f"跳过无权限访问的文件 {file_path}")
-                    failed_files.append(str(file_path))
-                except OSError as e:
-                    logger.warning(f"跳过无法读取的文件 {file_path}: {e}")
-                    failed_files.append(str(file_path))
-
-            if failed_files:
-                logger.warning(f"共跳过 {len(failed_files)} 个不可读文件: {failed_files[:5]}")
-
-            return documents
-        except Exception as e:
-            logger.error(f"列出文档失败: {e}")
-            raise DocumentError(f"列出文档失败: {e}") from e
-
-    def list_page(
+    def __init__(self, base_dir: str = "./data/documents", public_prefix: str = "/files") -> None:
+        self.storage_type = "local"
+        # 相对路径锚定到服务根目录，避免随 CWD 漂移写入仓库根目录
+        self.base_dir = Path(resolve_service_path(base_dir)).resolve()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.public_prefix = public_prefix.rstrip("/")
+        logger.info(f"LocalStorage initialized: base_dir={self.base_dir} public_prefix={self.public_prefix}")
+    def upload_file(
         self,
-        skip: int = 0,
-        limit: int | None = None,
-        status: str | None = None,
-        file_type: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int]:
-        """存储层分页列出文档（流式遍历 + 仅保留窗口，避免全量加载到内存）。
-
-        JSON 文件存储无法像 SQL 一样在索引层下推过滤/分页，仍需遍历全部文件
-        计算匹配总数；但相比"全量加载到内存再切片"，本实现只保留分页窗口内的
-        文档，内存占用 O(window) 而非 O(n)，服务层不再持有全量列表。
-        """
-        self._ensure_initialized()
-
-        matched_count = 0
-        page: list[dict[str, Any]] = []
-        failed_files: list[str] = []
-
+        data: bytes | BinaryIO,
+        key: str,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> UploadResult:
+        target = (self.base_dir / key).resolve()
+        # 安全检查：防止路径穿越
         try:
-            for file_path in self.storage_path.glob("*.json"):
-                try:
-                    with open(file_path, encoding="utf-8") as f:
-                        data = json.load(f)
-                except json.JSONDecodeError as e:
-                    logger.warning(f"跳过无效的JSON文件 {file_path}: {e}")
-                    failed_files.append(str(file_path))
-                    continue
-                except PermissionError:
-                    logger.warning(f"跳过无权限访问的文件 {file_path}")
-                    failed_files.append(str(file_path))
-                    continue
-                except OSError as e:
-                    logger.warning(f"跳过无法读取的文件 {file_path}: {e}")
-                    failed_files.append(str(file_path))
-                    continue
+            target.relative_to(self.base_dir)
+        except ValueError as exc:
+            raise ValueError(f"非法的存储路径: {key}") from exc
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(data, bytes):
+            content = data
+        else:
+            content = data.read()
+        target.write_bytes(content)
+        url = f"{self.public_prefix}/{key.lstrip('/')}"
+        logger.info(f"LocalStorage upload: key={key} size={len(content)}")
+        return UploadResult(key=key, url=url, size=len(content), storage="local", content_type=content_type)
 
-                if status is not None and data.get("status") != status:
-                    continue
-                if file_type is not None and data.get("file_type") != file_type:
-                    continue
+    def get_download_url(self, key: str, *, expires: int = 3600) -> str:
+        """返回本地相对路径（由静态文件中间件直接服务）。"""
+        return f"{self.public_prefix}/{key.lstrip('/')}"
 
-                matched_count += 1
-                # 只保留分页窗口内的文档，超出窗口仅计数不保留
-                if matched_count > skip and (limit is None or len(page) < limit):
-                    page.append(data)
-
-            if failed_files:
-                logger.warning(f"共跳过 {len(failed_files)} 个不可读文件: {failed_files[:5]}")
-
-            return page, matched_count
-        except Exception as e:
-            logger.error(f"分页列出文档失败: {e}")
-            raise DocumentError(f"列出文档失败: {e}") from e
-
-    def get_stats(self) -> dict[str, Any]:
-        """获取统计信息"""
-        self._ensure_initialized()
-
+    def delete_file(self, key: str) -> bool:
+        target = (self.base_dir / key).resolve()
         try:
-            files = list(self.storage_path.glob("*.json"))
-            return {
-                "type": "json",
-                "storage_path": str(self.storage_path),
-                "document_count": len(files),
-            }
-        except Exception as e:
-            logger.error(f"Failed to get stats: {e}")
-            return {"type": "json", "error": str(e)}
+            target.relative_to(self.base_dir)
+        except ValueError:
+            return False
+        if target.is_file():
+            target.unlink()
+            logger.info(f"LocalStorage deleted: key={key}")
+            return True
+        return False
 
-    def _ensure_initialized(self) -> None:
-        """确保已初始化"""
-        if not self._initialized:
-            raise DocumentError("DocumentStore not initialized. Call initialize() first.")
+    def file_exists(self, key: str) -> bool:
+        target = (self.base_dir / key).resolve()
+        try:
+            target.relative_to(self.base_dir)
+        except ValueError:
+            return False
+        return target.is_file()
+
+
+# ============================================================
+# S3 兼容对象存储实现（MinIO / 阿里云 OSS / 腾讯 COS / 七牛 Kodo）
+# ============================================================
+class S3CompatibleStorage(StorageProvider):
+    """S3 兼容对象存储。
+
+    通过 boto3 调用 S3 兼容 API。需要安装 boto3：uv add boto3
+    配置项：
+        endpoint_url: S3 兼容服务地址（MinIO / 云厂商 S3 端点）
+        access_key:   AccessKey
+        secret_key:   SecretKey
+        bucket:       存储空间名称
+        region:       存储区域（可选，部分实现可留空）
+        prefix:       对象键前缀（可选，如 "documents"）
+        public_url:   公开访问域名（可选，含协议头，如 https://cdn.example.com）
+        use_ssl:      是否使用 HTTPS
+    """
+
+    def __init__(
+        self,
+        endpoint_url: str,
+        access_key: str,
+        secret_key: str,
+        bucket: str,
+        region: str = "",
+        prefix: str = "",
+        public_url: str = "",
+        use_ssl: bool = True,
+    ) -> None:
+        try:
+            import boto3
+            from botocore.config import Config as BotoConfig
+        except ImportError as exc:
+            raise ImportError("S3 兼容存储需要 boto3，请执行: uv pip install boto3") from exc
+        self._bucket_name = bucket
+        self._region = region
+        self.storage_type = "s3"
+        self._prefix = prefix.strip("/")
+        self._public_url = public_url.rstrip("/") if public_url else ""
+        # 构建 S3 客户端
+        s3_config = BotoConfig(
+            signature_version="s3v4",
+            s3={"addressing_style": "virtual"},
+        )
+        self._client = boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region or None,
+            use_ssl=use_ssl,
+            config=s3_config,
+        )
+        logger.info(f"S3CompatibleStorage initialized: bucket={bucket} endpoint={endpoint_url} region={region}")
+
+    def _full_key(self, key: str) -> str:
+        """拼接 prefix。"""
+        key_clean = key.strip("/")
+        if self._prefix:
+            return f"{self._prefix}/{key_clean}"
+        return key_clean
+
+    def _get_public_url(self, key: str) -> str:
+        """获取公开访问 URL（配置了 public_url 时使用，否则返回空，由 get_download_url 出签名 URL）。"""
+        if self._public_url:
+            return f"{self._public_url}/{key.lstrip('/')}"
+        return ""
+
+    def upload_file(
+        self,
+        data: bytes | BinaryIO,
+        key: str,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> UploadResult:
+        full_key = self._full_key(key)
+        if not isinstance(data, bytes):
+            data = data.read()
+        extra_args: dict[str, str] = {"ContentType": content_type}
+        self._client.put_object(
+            Bucket=self._bucket_name,
+            Key=full_key,
+            Body=data,
+            **extra_args,
+        )
+        url = self._get_public_url(full_key)
+        logger.info(f"S3CompatibleStorage upload: key={full_key} size={len(data)}")
+        return UploadResult(
+            key=full_key,
+            url=url,
+            size=len(data),
+            storage="s3",
+            content_type=content_type,
+        )
+
+    def get_download_url(self, key: str, *, expires: int = 3600) -> str:
+        """生成带签名的临时下载 URL。"""
+        full_key = self._full_key(key)
+        url: str = self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket_name, "Key": full_key},
+            ExpiresIn=expires,
+        )
+        return url
+
+    def delete_file(self, key: str) -> bool:
+        full_key = self._full_key(key)
+        try:
+            self._client.delete_object(Bucket=self._bucket_name, Key=full_key)
+            logger.info(f"S3CompatibleStorage deleted: key={full_key}")
+            return True
+        except Exception as e:
+            logger.warning(f"S3CompatibleStorage delete failed: key={full_key} error={e}")
+            return False
+
+    def file_exists(self, key: str) -> bool:
+        full_key = self._full_key(key)
+        try:
+            self._client.head_object(Bucket=self._bucket_name, Key=full_key)
+            return True
+        except Exception:
+            return False
+
+
+# ============================================================
+# 工厂函数
+# ============================================================
+def get_storage_provider() -> StorageProvider:
+    """根据配置创建存储提供者实例（从 settings.storage 读取，自动选择实现）。"""
+    from qingchuan_rag.core.config import settings
+
+    storage_cfg = settings.storage
+    if storage_cfg.provider == "s3":
+        if not all(
+            [storage_cfg.s3_endpoint_url, storage_cfg.s3_access_key, storage_cfg.s3_secret_key, storage_cfg.s3_bucket]
+        ):
+            logger.warning("S3 storage selected but credentials incomplete, falling back to local")
+            return LocalStorage(base_dir=storage_cfg.base_dir, public_prefix=storage_cfg.public_prefix)
+        return S3CompatibleStorage(
+            endpoint_url=storage_cfg.s3_endpoint_url,
+            access_key=storage_cfg.s3_access_key,
+            secret_key=storage_cfg.s3_secret_key,
+            bucket=storage_cfg.s3_bucket,
+            region=storage_cfg.s3_region,
+            prefix=storage_cfg.s3_prefix,
+            public_url=storage_cfg.s3_public_url,
+            use_ssl=storage_cfg.s3_use_ssl,
+        )
+    # 默认本地存储
+    return LocalStorage(base_dir=storage_cfg.base_dir, public_prefix=storage_cfg.public_prefix)
+
+
+# 模块级缓存，避免每次请求都重新创建（应用级单例）
+_provider: StorageProvider | None = None
+
+
+def get_cached_storage_provider() -> StorageProvider:
+    """获取缓存的存储提供者（应用级单例，首次调用创建）。"""
+    global _provider
+    if _provider is None:
+        _provider = get_storage_provider()
+    return _provider
+
+
+def _reset_storage_provider() -> None:
+    """重置单例缓存（测试隔离用）。"""
+    global _provider
+    _provider = None
 
 
 __all__ = [
-    "DocumentStoreBase",
-    "JSONDocumentStore",
+    "StorageProvider",
+    "LocalStorage",
+    "S3CompatibleStorage",
+    "UploadResult",
+    "get_storage_provider",
+    "get_cached_storage_provider",
 ]

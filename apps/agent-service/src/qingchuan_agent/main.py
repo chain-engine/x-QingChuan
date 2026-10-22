@@ -52,9 +52,27 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # DB 失败不阻断启动
             logger.exception(f"数据库初始化失败（应用继续启动，DB 接口将返回 503）：{exc}")
 
+    # 4. Redis 初始化（checkpoint 与事件总线共用同一实例；连接失败不阻断，降级内存实现）
+    if settings.redis.enabled:
+        from qingchuan_agent.infras.redis_client import init_redis
+
+        await init_redis()
+
+    # 5. 事件总线装配（按 Redis 可用性选择实现，日志见 get_event_bus 内部）
+    from qingchuan_agent.infras.event_bus import get_event_bus
+
+    get_event_bus()
+
     yield
 
     # 关闭清理
+    from qingchuan_agent.infras.event_bus import shutdown_event_bus
+
+    await shutdown_event_bus()
+    if settings.redis.enabled:
+        from qingchuan_agent.infras.redis_client import close_redis
+
+        await close_redis()
     logger.info(f"{APP_NAME} 已关闭")
 
 

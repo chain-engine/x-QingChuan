@@ -43,13 +43,36 @@ class AgentRuntime:
     def _get_checkpointer(self) -> Any | None:
         """按配置装配检查点：
         - memory：进程内内存（开发期，重启丢状态）
-        - redis：待接入（需 redis 基础设施），未配置时回退 memory
+        - redis：LangGraph RedisSaver（与事件总线共用同一 Redis 实例）；
+          Redis 未启用或连接不可用时回退 memory 并告警（不阻断业务）
         """
         if self._checkpointer is not None:
             return self._checkpointer
-        mode = get_settings().agent.checkpoint
-        if mode == "redis":
-            logger.warning("Redis checkpoint 尚未接入，骨架回退 MemorySaver")
+        settings = get_settings()
+        if settings.agent.checkpoint == "redis":
+            from qingchuan_agent.infras.redis_client import (
+                get_sync_redis_client,
+                redis_available,
+            )
+
+            if settings.redis.enabled and redis_available():
+                from langgraph.checkpoint.redis import RedisSaver
+
+                try:
+                    saver = RedisSaver(redis_client=get_sync_redis_client())
+                    saver.setup()  # 建 checkpoint 索引（幂等）
+                    self._checkpointer = saver
+                    logger.info(
+                        "AgentRuntime checkpointer：RedisSaver"
+                        "（多副本共享断点，人工接管可跨实例恢复）"
+                    )
+                    return self._checkpointer
+                except Exception as exc:
+                    logger.warning(f"RedisSaver 初始化失败（{exc}），回退 MemorySaver")
+            else:
+                logger.warning(
+                    "agent.checkpoint=redis 但 Redis 未启用/不可用，回退 MemorySaver（重启即失）"
+                )
         from langgraph.checkpoint.memory import MemorySaver
 
         self._checkpointer = MemorySaver()

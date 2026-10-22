@@ -16,8 +16,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 
-from qingchuan_rag.constants import HttpStatus, APP_NAME, APP_DESCRIPTION, APP_VERSION
+from qingchuan_rag.constants import APP_DESCRIPTION, APP_NAME, APP_VERSION, HttpStatus
 from qingchuan_rag.core.config import settings
 from qingchuan_rag.core.exceptions import AppException
 from qingchuan_rag.core.logger import logger, setup_logging
@@ -25,6 +26,7 @@ from qingchuan_rag.core.middleware import setup_middleware
 from qingchuan_rag.http_server.response import error_response, success_response
 from qingchuan_rag.http_server.router import api_router
 from qingchuan_rag.infras.database import init_database
+from qingchuan_rag.infras.storage import LocalStorage
 from qingchuan_rag.mcp_server.server import bind_rag_service, mcp_server
 from qingchuan_rag.rag import Augmentation, LLMGeneration, RAGPipeline, Retrieval
 from qingchuan_rag.repositories.bm25_repository import BM25Repository
@@ -52,8 +54,18 @@ async def lifespan(app: FastAPI):
     # 初始化审计服务
     audit_service = AuditService()
 
-    # 初始化文档存储 Repository层
-    doc_repo = DocumentRepository(storage_path="./data/documents")
+    # 初始化文档存储 Repository层（元数据落业务库，内容走对象存储，storage 从配置自动创建）
+    doc_repo = DocumentRepository()
+
+    # 本地存储模式：挂载内容静态目录（public_prefix → storage base_dir），
+    # 使 content_url（/files/...）可直接访问；S3 模式无需挂载（走签名 URL）
+    if isinstance(doc_repo.storage, LocalStorage) and doc_repo.storage.public_prefix:
+        app.mount(
+            doc_repo.storage.public_prefix,
+            StaticFiles(directory=doc_repo.storage.base_dir),
+            name="storage-files",
+        )
+        logger.info(f"Static files mounted: {doc_repo.storage.public_prefix} -> {doc_repo.storage.base_dir}")
 
     # 初始化 BM25 Repository层（稀疏索引）
     bm25_repo = BM25Repository(

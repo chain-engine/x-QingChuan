@@ -13,21 +13,27 @@ from qingchuan_rag.core.config import settings
 from qingchuan_rag.core.middleware import get_cors_origins, setup_cors_middleware
 
 
+@pytest.fixture
+def cors_env(monkeypatch) -> None:
+    """把 CORS 相关底层字段置为可控状态（SERVER_ENVIRONMENT 等为只读 property，patch 底层字段）。"""
+    monkeypatch.setattr(settings.server, "environment", "development")
+    monkeypatch.setattr(settings.cors, "enabled", True)
+    monkeypatch.setattr(settings.cors, "allow_credentials", True)
+    monkeypatch.setattr(settings.cors, "allow_origins", "*")
+
+
 class TestCorsMiddleware:
-    def test_cors_origins_parse(self, monkeypatch) -> None:
-        monkeypatch.setattr(settings, "CORS_ALLOW_ORIGINS", "http://a.com, http://b.com")
+    def test_cors_origins_parse(self, cors_env, monkeypatch) -> None:
+        monkeypatch.setattr(
+            settings.cors, "allow_origins", "http://a.com, http://b.com"
+        )
         assert get_cors_origins() == ["http://a.com", "http://b.com"]
 
-    def test_cors_origins_default_wildcard(self, monkeypatch) -> None:
-        monkeypatch.setattr(settings, "CORS_ALLOW_ORIGINS", "*")
+    def test_cors_origins_default_wildcard(self, cors_env) -> None:
         assert get_cors_origins() == ["*"]
 
-    def test_wildcard_origin_disables_credentials(self, monkeypatch) -> None:
+    def test_wildcard_origin_disables_credentials(self, cors_env) -> None:
         """开发环境默认 * + credentials=True → 自动降级 credentials=False"""
-        monkeypatch.setattr(settings, "SERVER_ENVIRONMENT", "development")
-        monkeypatch.setattr(settings.cors, "allow_credentials", True)
-        monkeypatch.setattr(settings, "CORS_ENABLED", True)
-
         app = Starlette()
         setup_cors_middleware(app)
 
@@ -39,13 +45,11 @@ class TestCorsMiddleware:
         assert "*" in kwargs["allow_origins"]
         assert kwargs["allow_credentials"] is False
 
-    def test_explicit_origins_keep_credentials(self, monkeypatch) -> None:
+    def test_explicit_origins_keep_credentials(self, cors_env, monkeypatch) -> None:
         """显式来源列表时允许携带凭证"""
-        monkeypatch.setattr(settings, "SERVER_ENVIRONMENT", "development")
-        monkeypatch.setattr(settings.cors, "allow_credentials", True)
-        monkeypatch.setattr(settings, "CORS_ALLOW_ORIGINS", "http://localhost:3000")
-        monkeypatch.setattr(settings, "CORS_ENABLED", True)
-
+        monkeypatch.setattr(
+            settings.cors, "allow_origins", "http://localhost:3000"
+        )
         app = Starlette()
         setup_cors_middleware(app)
 
@@ -56,11 +60,9 @@ class TestCorsMiddleware:
         assert kwargs["allow_origins"] == ["http://localhost:3000"]
         assert kwargs["allow_credentials"] is True
 
-    def test_production_rejects_wildcard_origin(self, monkeypatch) -> None:
+    def test_production_rejects_wildcard_origin(self, cors_env, monkeypatch) -> None:
         """生产环境含 * 直接阻断启动（与 agent-service 校验对齐）"""
-        monkeypatch.setattr(settings, "SERVER_ENVIRONMENT", "production")
-        monkeypatch.setattr(settings, "CORS_ENABLED", True)
-
+        monkeypatch.setattr(settings.server, "environment", "production")
         app = Starlette()
         with pytest.raises(ValueError, match="不能为"):
             setup_cors_middleware(app)

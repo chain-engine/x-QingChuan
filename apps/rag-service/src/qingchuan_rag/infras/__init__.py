@@ -31,12 +31,23 @@ from qingchuan_rag.infras.llm import (
     get_llm_provider,
     list_providers,
 )
-from qingchuan_rag.infras.storage import DocumentStoreBase, JSONDocumentStore
+from qingchuan_rag.infras.storage import (
+    LocalStorage,
+    S3CompatibleStorage,
+    StorageProvider,
+    UploadResult,
+    get_cached_storage_provider,
+    get_storage_provider,
+)
 from qingchuan_rag.infras.vector import ChromaVectorStore, VectorStoreBase
 
 __all__ = [
-    "DocumentStoreBase",
-    "JSONDocumentStore",
+    "StorageProvider",
+    "LocalStorage",
+    "S3CompatibleStorage",
+    "UploadResult",
+    "get_storage_provider",
+    "get_cached_storage_provider",
     "EmbeddingModelBase",
     "BGEEmbeddingModel",
     "VectorStoreBase",

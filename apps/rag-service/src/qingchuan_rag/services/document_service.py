@@ -21,6 +21,16 @@ from qingchuan_rag.repositories.vector_repository import VectorRepository
 from qingchuan_rag.services.audit_service import AuditService
 from qingchuan_rag.services.base_service import BaseService
 
+# 文件类型 → MIME（内容对象存储 ContentType）
+_CONTENT_TYPES: dict[str, str] = {
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "html": "text/html",
+    "json": "application/json",
+}
+
 
 class DocumentService(BaseService):
     """文档业务服务 - 封装文档索引和管理流程"""
@@ -132,15 +142,18 @@ class DocumentService(BaseService):
         file_size: int = 0,
         metadata: dict[str, Any] | None = None,
         operator: dict[str, Any] | None = None,
+        file_content: bytes | None = None,
     ) -> dict[str, Any]:
         """上传并索引文档
 
         Args:
-            text: 文档文本内容
+            text: 文档文本内容（用于切分 / 向量化）
             file_name: 文件名
             file_type: 文件类型
             file_size: 文件大小
             metadata: 额外元数据
+            operator: 操作人上下文（审计）
+            file_content: 原始文件字节（写入对象存储）；缺省时以 text 的 UTF-8 编码落盘
 
         Returns:
             索引结果
@@ -153,15 +166,30 @@ class DocumentService(BaseService):
         document_id = str(uuid.uuid4())
 
         try:
-            # 保存文档元数据（Json格式）
+            # 1. 内容写入对象存储（本地文件系统 / S3 兼容），拿到 content_key
+            logger.info(f"Indexing document {document_id}: storing content to object storage...")
+            content_bytes = file_content if file_content is not None else text.encode("utf-8")
+            content_key = self._doc_repo.storage.make_object_key("documents", file_name or "document.txt")
+            upload_result = self._doc_repo.storage.upload_file(
+                content_bytes,
+                content_key,
+                content_type=_CONTENT_TYPES.get(file_type, "application/octet-stream"),
+            )
+            logger.info(f"Document {document_id}: content stored at key={content_key} size={upload_result.size}")
+
+            # 2. 保存文档元数据（入库；内容引用 content_key）
             logger.info(f"Indexing document {document_id}: saving metadata...")
             self._doc_repo.save(
                 {
                     "document_id": document_id,
                     "file_name": file_name,
                     "file_type": file_type,
-                    "file_size": file_size,
+                    "file_size": file_size or len(content_bytes),
                     "status": DocStatus.PROCESSING.mark,
+                    "content_key": content_key,
+                    "storage_backend": upload_result.storage,
+                    "content_url": upload_result.url or None,
+                    "checksum": DocumentRepository.make_checksum(content_bytes),
                     "created_at": datetime.now(UTC).isoformat(),
                     "updated_at": datetime.now(UTC).isoformat(),
                     "metadata": metadata,
@@ -169,7 +197,7 @@ class DocumentService(BaseService):
             )
             logger.info(f"Document {document_id} metadata saved")
 
-            # 切分文本
+            # 3. 切分文本
             logger.info(f"Document {document_id}: splitting text...")
             chunks = self._chunking_provider.chunk_text_with_metadata(
                 text=text,
@@ -279,6 +307,15 @@ class DocumentService(BaseService):
             vector_count = self._vector_repo.delete_by_document_id(document_id)
             if self._bm25_repo:
                 self._bm25_repo.delete_by_document_id(document_id)
+
+            # 删除内容对象（本地文件系统 / S3），对象缺失仅告警不阻断
+            content_key = before.get("content_key") if before else None
+            if content_key:
+                if self._doc_repo.storage.delete_file(content_key):
+                    logger.info(f"Document {document_id}: content object deleted (key={content_key})")
+                else:
+                    logger.warning(f"Document {document_id}: content object not found or delete failed (key={content_key})")
+
             self._doc_repo.delete(document_id)
 
             logger.info(f"Successfully deleted document {document_id} ({vector_count} vectors)")
@@ -347,6 +384,7 @@ class DocumentService(BaseService):
             "status": document.get("status"),
             "chunk_count": document.get("chunk_count", 0),
             "vector_count": len(vectors),
+            "content_url": self._build_content_url(document.get("content_key")),
             "created_at": document.get("created_at"),
             "updated_at": document.get("updated_at"),
             "metadata": document.get("metadata", {}),
@@ -413,6 +451,16 @@ class DocumentService(BaseService):
             remarks=f"查询文档「{result['file_name']}」状态",
         )
         return result
+
+    def _build_content_url(self, content_key: str | None) -> str | None:
+        """按需生成内容下载 URL（本地相对路径 / S3 签名 URL），失败不阻断。"""
+        if not content_key:
+            return None
+        try:
+            return self._doc_repo.storage.get_download_url(content_key)
+        except Exception:
+            logger.warning(f"Failed to build content url for key={content_key}")
+            return None
 
     def list_documents(
         self,

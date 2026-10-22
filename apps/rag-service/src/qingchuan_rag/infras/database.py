@@ -253,6 +253,7 @@ def init_database() -> Engine:
     """初始化数据库，创建所有表。"""
 
     from qingchuan_rag.models.audit_log_entity import AuditLogEntity  # noqa: F401
+    from qingchuan_rag.models.document_entity import DocumentEntity  # noqa: F401
     from qingchuan_rag.models.sync_task_entity import SyncTaskEntity  # noqa: F401
 
     engine = get_cached_database_provider().get_engine()

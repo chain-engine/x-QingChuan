@@ -23,7 +23,9 @@ class TestDocumentRepositoryIntegration:
     @pytest.fixture
     def repository(self, temp_storage):
         """Create repository with temp storage"""
-        repo = DocumentRepository(storage_path=temp_storage)
+        from qingchuan_rag.infras.storage import LocalStorage
+
+        repo = DocumentRepository(storage=LocalStorage(base_dir=temp_storage))
         repo.initialize()
         yield repo
         repo.shutdown()
@@ -39,7 +41,8 @@ class TestDocumentRepositoryIntegration:
         loaded = repository.load("test-doc-1")
         assert loaded is not None
         assert loaded["document_id"] == "test-doc-1"
-        assert loaded["content"] == "Test content"
+        # 非列字段并入 metadata（SQLAlchemy 版存储语义）
+        assert loaded["metadata"]["content"] == "Test content"
 
     def test_document_not_found(self, repository):
         """Test loading non-existent document"""
@@ -121,8 +124,8 @@ class TestDocumentRepositoryIntegration:
         repository.save(doc)
         repository.update("test-update", {"content": "Updated", "version": 2})
         loaded = repository.load("test-update")
-        assert loaded["content"] == "Updated"
-        assert loaded["version"] == 2
+        assert loaded["metadata"]["content"] == "Updated"
+        assert loaded["metadata"]["version"] == 2
 
     def test_stats(self, repository):
         """Test getting repository stats"""

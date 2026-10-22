@@ -174,6 +174,30 @@ class GenerationConfig:
 
 
 @dataclass
+class StorageConfig:
+    """文件存储配置（文档内容对象存储，元数据入库后内容走此层）。
+
+    provider: local | s3
+        - local：本地文件系统（开发 / 单机生产默认，相对路径锚定服务根 data 目录）
+        - s3：S3 兼容对象存储（MinIO / 阿里云 OSS / 腾讯 COS / 七牛 Kodo，生产推荐）
+    """
+
+    provider: str = "local"
+    # local
+    base_dir: str = "./data/documents"
+    public_prefix: str = "/files"
+    # s3（S3 兼容对象存储）
+    s3_endpoint_url: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket: str = ""
+    s3_region: str = ""
+    s3_prefix: str = "documents"
+    s3_public_url: str = ""
+    s3_use_ssl: bool = True
+
+
+@dataclass
 class LLMDefaultsConfig:
     """LLM 调用层通用默认配置（所有 Provider 的兜底参数，独立于 RAG 生成配置）"""
 
@@ -271,6 +295,19 @@ class Settings:
                 "distance": "cosine",
                 "milvus_uri": "./data/milvus.db",
                 "dimension": None,
+            },
+            "storage": {
+                "provider": "local",
+                "base_dir": "./data/documents",
+                "public_prefix": "/files",
+                "s3_endpoint_url": "",
+                "s3_access_key": "",
+                "s3_secret_key": "",
+                "s3_bucket": "",
+                "s3_region": "",
+                "s3_prefix": "documents",
+                "s3_public_url": "",
+                "s3_use_ssl": True,
             },
             "text_splitter": {
                 "provider": "langchain",
@@ -405,8 +442,20 @@ class Settings:
             "CORS_ALLOW_CREDENTIALS": ("cors", "allow_credentials", lambda v: v.lower() == "true"),
             "CORS_ALLOW_METHODS": ("cors", "allow_methods", str),
             "CORS_ALLOW_HEADERS": ("cors", "allow_headers", str),
-            # 业务数据库（审计日志等）
+            # 业务数据库（审计日志 / 同步任务 / 文档元数据）
             "DATABASE_URL": ("database", "db_url", str),
+            # 文件存储（文档内容对象存储）
+            "STORAGE_PROVIDER": ("storage", "provider", str),
+            "STORAGE_LOCAL_BASE_DIR": ("storage", "base_dir", str),
+            "STORAGE_LOCAL_PUBLIC_PREFIX": ("storage", "public_prefix", str),
+            "STORAGE_S3_ENDPOINT_URL": ("storage", "s3_endpoint_url", str),
+            "STORAGE_S3_ACCESS_KEY": ("storage", "s3_access_key", str),
+            "STORAGE_S3_SECRET_KEY": ("storage", "s3_secret_key", str),
+            "STORAGE_S3_BUCKET": ("storage", "s3_bucket", str),
+            "STORAGE_S3_REGION": ("storage", "s3_region", str),
+            "STORAGE_S3_PREFIX": ("storage", "s3_prefix", str),
+            "STORAGE_S3_PUBLIC_URL": ("storage", "s3_public_url", str),
+            "STORAGE_S3_USE_SSL": ("storage", "s3_use_ssl", lambda v: v.lower() == "true"),
             # 人社数据同步
             "SYNC_ENABLED": ("sync", "enabled", lambda v: v.lower() == "true"),
             "SYNC_CRON": ("sync", "cron", str),
@@ -435,6 +484,7 @@ class Settings:
         self.cors = CORSConfig(**self._config["cors"])
         self.database = DatabaseConfig(**self._config["database"])
         self.sync = SyncConfig(**self._config["sync"])
+        self.storage = StorageConfig(**self._config["storage"])
         self.embedding = EmbeddingConfig(**self._config["embedding"])
         self.vector_store = VectorStoreConfig(**self._config["vector_store"])
         self.text_splitter = TextSplitterConfig(**self._config["text_splitter"])
@@ -703,6 +753,51 @@ class Settings:
     @property
     def DATABASE_URL(self) -> str:
         return self.database.db_url
+
+    # ===== 文件存储（文档内容对象存储） =====
+    @property
+    def STORAGE_PROVIDER(self) -> str:
+        return self.storage.provider
+
+    @property
+    def STORAGE_LOCAL_BASE_DIR(self) -> str:
+        return self.storage.base_dir
+
+    @property
+    def STORAGE_LOCAL_PUBLIC_PREFIX(self) -> str:
+        return self.storage.public_prefix
+
+    @property
+    def STORAGE_S3_ENDPOINT_URL(self) -> str:
+        return self.storage.s3_endpoint_url
+
+    @property
+    def STORAGE_S3_ACCESS_KEY(self) -> str:
+        return self.storage.s3_access_key
+
+    @property
+    def STORAGE_S3_SECRET_KEY(self) -> str:
+        return self.storage.s3_secret_key
+
+    @property
+    def STORAGE_S3_BUCKET(self) -> str:
+        return self.storage.s3_bucket
+
+    @property
+    def STORAGE_S3_REGION(self) -> str:
+        return self.storage.s3_region
+
+    @property
+    def STORAGE_S3_PREFIX(self) -> str:
+        return self.storage.s3_prefix
+
+    @property
+    def STORAGE_S3_PUBLIC_URL(self) -> str:
+        return self.storage.s3_public_url
+
+    @property
+    def STORAGE_S3_USE_SSL(self) -> bool:
+        return self.storage.s3_use_ssl
 
     # ===== 人社数据同步 =====
     @property

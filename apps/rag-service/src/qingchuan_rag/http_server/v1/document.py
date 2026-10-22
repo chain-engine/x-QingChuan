@@ -55,6 +55,7 @@ async def upload_document(
             file_size=len(content),
             metadata=meta,
             operator=operator,
+            file_content=content,
         )
 
         data = {

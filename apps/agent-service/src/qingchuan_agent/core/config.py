@@ -124,10 +124,44 @@ class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_AGENT_", extra="ignore")
 
     route_mode: str = RouteMode.EXPLICIT.mark  # explicit / llm / hybrid
-    checkpoint: str = "memory"  # memory / redis（redis 待接入）
+    checkpoint: str = "memory"  # memory / redis（redis 需 QINGCHUAN_AGENT_REDIS_ENABLED=true）
     confidence_threshold: float = 0.7  # LLM 动态路由采信阈值
     task_max_retries: int = 3  # 失败重试上限
     task_timeout_seconds: int = 300  # 单任务超时
+
+
+class RedisSettings(BaseSettings):
+    """Redis 配置（checkpoint 与事件总线共用同一实例 / 连接配置）。
+
+    - checkpoint：agent.checkpoint=redis 时，LangGraph RedisSaver 走同步连接
+    - 事件总线：redis.enabled=true 时，EventBus 工厂切换 Redis Pub/Sub（跨进程广播）
+    两者共用同一 Redis 实例（同 host/port/db），分别持有同步 / 异步连接池。
+    """
+
+    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_REDIS_", extra="ignore")
+
+    enabled: bool = False  # 默认关闭：骨架期可无 Redis 启动（memory checkpoint + 内存事件总线）
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    username: str = ""
+    password: str = ""  # 敏感信息，仅通过环境变量 / .env 注入
+    ssl: bool = False  # true 时使用 rediss://（TLS）
+    url: str = ""  # 可选完整连接 URL（redis://...），提供时优先于 host/port 组装
+    socket_timeout: float = 5.0
+
+    @property
+    def connection_url(self) -> str:
+        """生成 Redis 连接串（url 优先，否则 host/port/db 组装）。"""
+        if self.url:
+            return self.url
+        auth = (
+            f"{quote_plus(self.username)}:{quote_plus(self.password)}@"
+            if self.username or self.password
+            else ""
+        )
+        scheme = "rediss" if self.ssl else "redis"
+        return f"{scheme}://{auth}{self.host}:{self.port}/{self.db}"
 
 
 class RagClientSettings(BaseSettings):
@@ -162,6 +196,7 @@ class Settings(BaseSettings):
     ai: AiSettings = AiSettings()
     agent: AgentSettings = AgentSettings()
     rag: RagClientSettings = RagClientSettings()
+    redis: RedisSettings = RedisSettings()
 
     @model_validator(mode="after")
     def _load_database_from_env_file(self) -> Settings:
@@ -243,6 +278,49 @@ class Settings(BaseSettings):
             self.ai.llm = AiLLMSettings(**merged)
         return self
 
+    @model_validator(mode="after")
+    def _load_redis_from_env_file(self) -> Settings:
+        """从 OS 环境变量与 .env 补齐 redis 段（嵌套模型字段不自动读取 env_file）。
+
+        与 database / ai 段同因：pydantic-settings 的 env_file 不作用于嵌套模型字段。
+        优先级：OS 环境变量 > .env > 代码默认值（OS 已注入时不再用 .env 覆盖）。
+        """
+        prefix = "QINGCHUAN_AGENT_REDIS_"
+        os_values = {k: v for k, v in os.environ.items() if k.startswith(prefix)}
+        file_values = dotenv_values(QINGCHUAN_ROOT_ENV)
+        overrides: dict[str, object] = {}
+        for field in (
+            "enabled",
+            "host",
+            "port",
+            "db",
+            "username",
+            "password",
+            "ssl",
+            "url",
+            "socket_timeout",
+        ):
+            env_key = prefix + field.upper()
+            raw = os_values.get(env_key, file_values.get(env_key))
+            if raw is None:
+                continue
+            try:
+                if field in ("enabled", "ssl"):
+                    overrides[field] = str(raw).lower() in ("true", "1", "yes")
+                elif field in ("port", "db"):
+                    overrides[field] = int(raw)
+                elif field == "socket_timeout":
+                    overrides[field] = float(raw)
+                else:
+                    overrides[field] = str(raw)
+            except (ValueError, TypeError):
+                pass
+        if overrides:
+            merged = self.redis.model_dump()
+            merged.update(overrides)
+            self.redis = RedisSettings(**merged)
+        return self
+
     # ----------------------------------------------------------
     # 环境判断
     # ----------------------------------------------------------
@@ -287,9 +365,18 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "生产环境 QINGCHUAN_AGENT_CORS_ORIGINS 不能为 *，请显式配置允许的域名列表"
                 )
+            if self.agent.checkpoint == "redis" and not self.redis.enabled:
+                raise ValueError(
+                    "agent.checkpoint=redis 时须启用 Redis（QINGCHUAN_AGENT_REDIS_ENABLED=true）"
+                )
             if self.agent.checkpoint == "memory":
                 raise ValueError(
                     "生产环境（APP_ENV=production）禁止使用 memory checkpoint，请配置 redis"
+                )
+            if self.is_production and not self.redis.enabled:
+                raise ValueError(
+                    "生产环境（APP_ENV=production）要求启用 Redis："
+                    "事件总线与人工接管断点续跑均依赖 Redis"
                 )
 
 
@@ -313,6 +400,7 @@ __all__ = [
     "DatabaseSettings",
     "LoggingSettings",
     "RagClientSettings",
+    "RedisSettings",
     "ServerSettings",
     "Settings",
     "get_settings",

@@ -116,8 +116,12 @@ def temp_dir():
 
 @pytest.fixture
 def document_repository(temp_dir):
-    """文档仓库测试夹具"""
-    repo = DocumentRepository(storage_path=str(Path(temp_dir) / "documents"))
+    """文档仓库测试夹具（元数据落测试 SQLite，内容落临时目录对象存储）"""
+    from qingchuan_rag.infras.storage import LocalStorage
+
+    repo = DocumentRepository(
+        storage=LocalStorage(base_dir=str(Path(temp_dir) / "documents"), public_prefix="/files")
+    )
     repo.initialize()
     yield repo
     repo.shutdown()

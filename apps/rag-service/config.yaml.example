@@ -21,12 +21,33 @@ logging:
   retention: 7 days
 
 # ====================================
-# 业务数据库配置（审计日志 / 同步任务状态，MySQL；本地可 SQLite）
+# 业务数据库配置（审计日志 / 同步任务 / 文档元数据，MySQL；本地可 SQLite）
 # ====================================
 database:
   # 默认 MySQL（生产）；本地开发可切回 sqlite:///./data/qingchuan.db
   # 注意：数据库需提前创建（如 CREATE DATABASE qingchuan CHARACTER SET utf8mb4）
   db_url: "mysql+pymysql://yeyushilai:123456@127.0.0.1:3306/qingchuan?charset=utf8mb4"
+
+# ====================================
+# 文件存储配置（文档内容对象存储；元数据入库后内容走此层）
+# provider: local | s3
+#   local：本地文件系统（开发 / 单机生产默认，相对路径锚定 apps/rag-service/data）
+#   s3：S3 兼容对象存储（MinIO / 阿里云 OSS / 腾讯 COS / 七牛 Kodo，生产推荐）
+# ====================================
+storage:
+  provider: local            # local | s3
+  # local 后端
+  base_dir: ./data/documents # 本地内容根目录（相对路径自动锚定服务根）
+  public_prefix: /files      # 本地静态访问前缀（FastAPI StaticFiles 挂载点）
+  # s3 后端（provider: s3 时生效；缺凭据自动回退 local）
+  s3_endpoint_url: ""        # S3 兼容服务地址，如 http://minio:9000
+  s3_access_key: ""
+  s3_secret_key: ""
+  s3_bucket: ""              # 存储空间名称
+  s3_region: ""              # 可选
+  s3_prefix: documents       # 对象键前缀
+  s3_public_url: ""          # 可选：公开访问域名（含协议头）
+  s3_use_ssl: true
 
 # ====================================
 # 人社数据同步配置（触发接口 + 周期调度）
