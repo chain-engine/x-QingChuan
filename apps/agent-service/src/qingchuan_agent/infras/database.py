@@ -176,8 +176,52 @@ def get_cached_database_provider() -> DatabaseProvider:
 # ============================================================
 
 
+def _sync_missing_columns(engine: Engine) -> None:
+    """补齐已存在表上模型新增的列（与建表逻辑互补：create_all 只建表、不补列）。
+
+    模型演进新增列后，旧表通过 `ALTER TABLE ... ADD COLUMN` 自动对齐，
+    避免 SELECT 引用不存在的列导致 (1054, "Unknown column ...") 运行时错误。
+    无法安全编译的列（如客户端默认值）跳过并告警，不阻断启动。
+    """
+    added: list[str] = []
+    inspector = inspect(engine)
+    for table_name, table in Base.metadata.tables.items():
+        if not inspector.has_table(table_name):
+            continue  # 缺失表交由 init_database 的建表逻辑创建
+        existing = {col["name"] for col in inspector.get_columns(table_name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            try:
+                type_sql = column.type.compile(engine.dialect)
+                default_sql = ""
+                if column.server_default is not None:
+                    raw = column.server_default.arg
+                    if isinstance(raw, str):
+                        default_sql = f" DEFAULT {raw}"
+                    elif hasattr(raw, "text"):
+                        default_sql = f" DEFAULT {raw.text}"
+                nullable_sql = "NULL" if column.nullable else "NOT NULL"
+                ddl = (
+                    f"ALTER TABLE {table_name} ADD COLUMN "
+                    f"{column.name} {type_sql} {nullable_sql}{default_sql}"
+                )
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+                added.append(f"{table_name}.{column.name}")
+                logger.info(f"Schema sync: added missing column {table_name}.{column.name}")
+            except Exception:
+                logger.warning(
+                    f"Schema sync: skip column {table_name}.{column.name} "
+                    f"(cannot compile ALTER, manual migration may be required)",
+                    exc_info=True,
+                )
+    if added:
+        logger.info(f"Schema sync: added {len(added)} missing column(s): {', '.join(added)}")
+
+
 def init_database() -> None:
-    """初始化 MySQL 数据库：检测缺失的表并创建（幂等，可重复调用）。
+    """初始化 MySQL 数据库：检测缺失的表并创建（幂等，可重复调用），并对已存在表补齐模型新增列。
 
     与 `Base.metadata.create_all()` 的差异：
         create_all 会对每张表执行 DESCRIBE 探测后按需创建（行为等价幂等），
@@ -190,11 +234,14 @@ def init_database() -> None:
     inspector = inspect(engine)
     existing = set(inspector.get_table_names())
     missing = [name for name in Base.metadata.tables if name not in existing]
-    if not missing:
+    if missing:
+        Base.metadata.create_all(
+            bind=engine, tables=[Base.metadata.tables[name] for name in missing]
+        )
+        logger.info(f"MySQL 建表完成（新增：{sorted(missing)}）")
+    else:
         logger.info(f"MySQL 表已齐备（{sorted(existing)}），跳过建表")
-        return
-    Base.metadata.create_all(bind=engine, tables=[Base.metadata.tables[name] for name in missing])
-    logger.info(f"MySQL 建表完成（新增：{sorted(missing)}）")
+    _sync_missing_columns(engine)
 
 
 __all__ = [

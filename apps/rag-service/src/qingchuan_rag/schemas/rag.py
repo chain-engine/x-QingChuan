@@ -213,13 +213,17 @@ RetrievedDocument = RetrievedChunk
 
 
 def from_search_results(results: list[dict[str, Any]]) -> list[RetrievedDocument]:
-    """将检索服务返回的原始结果转换为领域契约片段列表（HTTP 与 MCP 层共用）。"""
+    """将检索服务返回的原始结果转换为领域契约片段列表（HTTP 与 MCP 层共用）。
+
+    混合检索（向量 + BM25）产出的 score 量纲不一致：向量相似度 ∈ [0,1]，
+    BM25 原始分数无上界；领域契约约束 score ∈ [0,1]，这里统一收敛。
+    """
     return [
         RetrievedDocument(
             chunk_id=doc["id"],
             document_id=doc["metadata"].get("document_id", ""),
             text=doc["text"],
-            score=doc["score"],
+            score=max(0.0, min(1.0, float(doc.get("score", 0.0)))),
             metadata=doc["metadata"],
         )
         for doc in results

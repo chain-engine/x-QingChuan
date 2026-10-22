@@ -249,8 +249,54 @@ def get_cached_database_provider() -> DatabaseProvider:
 # ============================================================
 # 初始化与依赖入口（保持既有 API 兼容）
 # ============================================================
+def _sync_missing_columns(engine: Engine) -> None:
+    """补齐已存在表上模型新增的列（与 create_all 互补：create_all 只建表、不补列）。
+
+    模型演进新增列后，旧表通过 `ALTER TABLE ... ADD COLUMN` 自动对齐，
+    避免 SELECT 引用不存在的列导致 (1054, "Unknown column ...") 运行时错误。
+    无法安全编译的列（如客户端默认值）跳过并告警，不阻断启动。
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    added: list[str] = []
+    for table_name, table in Base.metadata.tables.items():
+        if not inspector.has_table(table_name):
+            continue  # 新表交由 create_all 创建
+        existing = {col["name"] for col in inspector.get_columns(table_name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            try:
+                type_sql = column.type.compile(engine.dialect)
+                default_sql = ""
+                if column.server_default is not None:
+                    raw = column.server_default.arg
+                    if isinstance(raw, str):
+                        default_sql = f" DEFAULT {raw}"
+                    elif hasattr(raw, "text"):
+                        default_sql = f" DEFAULT {raw.text}"
+                nullable_sql = "NULL" if column.nullable else "NOT NULL"
+                ddl = (
+                    f"ALTER TABLE {table_name} ADD COLUMN "
+                    f"{column.name} {type_sql} {nullable_sql}{default_sql}"
+                )
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+                added.append(f"{table_name}.{column.name}")
+                logger.info(f"Schema sync: added missing column {table_name}.{column.name}")
+            except Exception:
+                logger.warning(
+                    f"Schema sync: skip column {table_name}.{column.name} "
+                    f"(cannot compile ALTER, manual migration may be required)",
+                    exc_info=True,
+                )
+    if added:
+        logger.info(f"Schema sync: added {len(added)} missing column(s): {', '.join(added)}")
+
+
 def init_database() -> Engine:
-    """初始化数据库，创建所有表。"""
+    """初始化数据库，创建所有表，并对已存在的表补齐模型新增列。"""
 
     from qingchuan_rag.models.audit_log_entity import AuditLogEntity  # noqa: F401
     from qingchuan_rag.models.document_entity import DocumentEntity  # noqa: F401
@@ -258,6 +304,7 @@ def init_database() -> Engine:
 
     engine = get_cached_database_provider().get_engine()
     Base.metadata.create_all(bind=engine)
+    _sync_missing_columns(engine)
     logger.info("Database tables created")
 
 
