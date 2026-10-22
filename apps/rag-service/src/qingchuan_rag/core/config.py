@@ -400,7 +400,8 @@ class Settings:
             "VECTOR_STORE_PERSIST_DIR": ("vector_store", "persist_directory", str),
             "VECTOR_STORE_COLLECTION_NAME": ("vector_store", "collection_name", str),
             "VECTOR_STORE_DISTANCE": ("vector_store", "distance", str),
-            "MILVUS_URI": ("vector_store", "milvus_uri", str),
+            # .env 统一使用 VECTOR_STORE_MILVUS_URI 前缀（避免与 pymilvus 保留的 MILVUS_URI 环境变量冲突）
+            "VECTOR_STORE_MILVUS_URI": ("vector_store", "milvus_uri", str),
             "VECTOR_STORE_DIMENSION": ("vector_store", "dimension", int),
             "TEXT_SPLITTER_PROVIDER": ("text_splitter", "provider", str),
             "TEXT_SPLITTER_STRATEGY": ("text_splitter", "strategy", str),

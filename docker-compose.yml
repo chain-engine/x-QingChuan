@@ -1,6 +1,52 @@
 name: x-qingchuan
 
+# 彻底独立部署：mysql / redis / rag-service / agent-service 全部由本 compose 编排，
+# 服务间通过 compose 内部网络（服务名）通信，不依赖宿主机已有的 MySQL/Redis 等任何外部服务。
+#
+# 启动：docker compose up -d --build
+# 停止：docker compose down（保留数据卷）；彻底清理（含数据）：docker compose down -v
+#
+# 宿主端口映射说明（仅用于外部调试/运维访问，服务间不经过宿主端口）：
+#   - mysql  -> 13306:3306（本机 3306 通常已被本地 MySQL 占用，故避开；如无冲突可改回 "3306:3306"）
+#   - redis  -> 16379:6379（同上避开本机 6379）
+#   - rag    -> 8010:8010
+#   - agent  -> 8020:8020
+
 services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: qingchuan
+      MYSQL_USER: yeyushilai
+      MYSQL_PASSWORD: "123456"
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--requirepass", "123456", "--appendonly", "yes"]
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   rag-service:
     build:
       context: .
@@ -12,8 +58,14 @@ services:
       # MIMO_API_KEY: your-mimo-api-key
       # MIMO_API_BASE: https://api.xiaomimimo.com/v1
       # MIMO_MODEL_NAME: mimo-v2.6-pro
-      # 业务数据库（审计 / 同步任务状态）：生产按实际 MySQL 调整
-      # DATABASE_URL: mysql+pymysql://user:pass@mysql:3306/qingchuan?charset=utf8mb4
+      # 向量存储（milvus-lite 本地文件模式，数据落 rag-data 卷；生产改远程 Milvus 地址）
+      VECTOR_STORE_TYPE: milvus
+      VECTOR_STORE_MILVUS_URI: /app/data/milvus.db
+      VECTOR_STORE_COLLECTION_NAME: documents
+      VECTOR_STORE_DISTANCE: cosine
+      VECTOR_STORE_DIMENSION: 1024
+      # 业务数据库（审计 / 同步任务状态）→ compose 内部 mysql 服务；首次启动自动建表（幂等）
+      DATABASE_URL: mysql+pymysql://yeyushilai:123456@mysql:3306/qingchuan?charset=utf8mb4
       # 人社数据源与周期调度（生产必填）
       # SYNC_ENABLED: "true"
       # SYNC_CRON: "0 3 * * *"
@@ -22,7 +74,10 @@ services:
     ports:
       - "8010:8010"
     volumes:
-      - ./data:/app/data
+      - rag-data:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
   agent-service:
@@ -30,6 +85,8 @@ services:
       context: .
       dockerfile: apps/agent-service/Dockerfile
     environment:
+      # RAG 服务地址（compose 内部网络；独立部署不使用宿主 127.0.0.1）
+      QINGCHUAN_AGENT_RAG_MCP_URL: http://rag-service:8010/mcp
       QINGCHUAN_AGENT_RAG_HTTP_BASE_URL: http://rag-service:8010
       QINGCHUAN_AGENT_SERVER_HOST: 0.0.0.0
       QINGCHUAN_AGENT_SERVER_PORT: 8020
@@ -37,14 +94,31 @@ services:
       # QINGCHUAN_AGENT_AI_LLM_API_KEY: your-key
       # QINGCHUAN_AGENT_AI_LLM_BASE_URL: https://api.xiaomimimo.com/v1
       # QINGCHUAN_AGENT_AI_LLM_MODEL: mimo-v2.6-pro
-      # 任务/事件持久化（生产按实际 MySQL 调整）
-      # QINGCHUAN_AGENT_DATABASE_ENABLED: "true"
-      # QINGCHUAN_AGENT_DATABASE_HOST: mysql
-      # QINGCHUAN_AGENT_DATABASE_USER: root
-      # QINGCHUAN_AGENT_DATABASE_PASSWORD: your-password
-      # QINGCHUAN_AGENT_DATABASE_DATABASE: qingchuan
+      # 任务/事件持久化 → compose 内部 mysql 服务（enabled=true，与 rag-service 同库分表）
+      QINGCHUAN_AGENT_DATABASE_ENABLED: "true"
+      QINGCHUAN_AGENT_DATABASE_HOST: mysql
+      QINGCHUAN_AGENT_DATABASE_PORT: 3306
+      QINGCHUAN_AGENT_DATABASE_USER: yeyushilai
+      QINGCHUAN_AGENT_DATABASE_PASSWORD: "123456"
+      QINGCHUAN_AGENT_DATABASE_DATABASE: qingchuan
+      # Redis（checkpoint / 事件总线）→ compose 内部 redis 服务，3 号库
+      QINGCHUAN_AGENT_REDIS_ENABLED: "true"
+      QINGCHUAN_AGENT_REDIS_HOST: redis
+      QINGCHUAN_AGENT_REDIS_PORT: 6379
+      QINGCHUAN_AGENT_REDIS_DB: 3
+      QINGCHUAN_AGENT_REDIS_PASSWORD: "123456"
     ports:
       - "8020:8020"
     depends_on:
-      - rag-service
+      rag-service:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:
+  rag-data:

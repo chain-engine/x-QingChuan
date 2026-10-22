@@ -37,7 +37,7 @@ def _anchor_sqlite_url(database_url: str) -> str:
     """
     if not database_url.startswith("sqlite:///"):
         return database_url
-    rest = database_url[len("sqlite:///"):]
+    rest = database_url[len("sqlite:///") :]
     if not rest or rest.startswith(":") or os.path.isabs(rest):
         return database_url
     return f"sqlite:///{SERVICE_ROOT / rest}"

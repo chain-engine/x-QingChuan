@@ -169,13 +169,17 @@ class DocumentService(BaseService):
             # 1. 内容写入对象存储（本地文件系统 / S3 兼容），拿到 content_key
             logger.info(f"Indexing document {document_id}: storing content to object storage...")
             content_bytes = file_content if file_content is not None else text.encode("utf-8")
-            content_key = self._doc_repo.storage.make_object_key("documents", file_name or "document.txt")
+            content_key = self._doc_repo.storage.make_object_key(
+                "documents", file_name or "document.txt"
+            )
             upload_result = self._doc_repo.storage.upload_file(
                 content_bytes,
                 content_key,
                 content_type=_CONTENT_TYPES.get(file_type, "application/octet-stream"),
             )
-            logger.info(f"Document {document_id}: content stored at key={content_key} size={upload_result.size}")
+            logger.info(
+                f"Document {document_id}: content stored at key={content_key} size={upload_result.size}"
+            )
 
             # 2. 保存文档元数据（入库；内容引用 content_key）
             logger.info(f"Indexing document {document_id}: saving metadata...")
@@ -312,9 +316,13 @@ class DocumentService(BaseService):
             content_key = before.get("content_key") if before else None
             if content_key:
                 if self._doc_repo.storage.delete_file(content_key):
-                    logger.info(f"Document {document_id}: content object deleted (key={content_key})")
+                    logger.info(
+                        f"Document {document_id}: content object deleted (key={content_key})"
+                    )
                 else:
-                    logger.warning(f"Document {document_id}: content object not found or delete failed (key={content_key})")
+                    logger.warning(
+                        f"Document {document_id}: content object not found or delete failed (key={content_key})"
+                    )
 
             self._doc_repo.delete(document_id)
 

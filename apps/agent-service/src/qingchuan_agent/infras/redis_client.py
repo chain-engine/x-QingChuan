@@ -74,8 +74,7 @@ async def init_redis() -> bool:
     if not settings.enabled:
         _available = False
         logger.info(
-            "Redis 未启用（QINGCHUAN_AGENT_REDIS_ENABLED=false），"
-            "checkpoint/事件总线走内存实现"
+            "Redis 未启用（QINGCHUAN_AGENT_REDIS_ENABLED=false），checkpoint/事件总线走内存实现"
         )
         return False
     try:

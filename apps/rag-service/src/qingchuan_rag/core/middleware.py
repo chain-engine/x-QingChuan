@@ -83,9 +83,7 @@ def setup_cors_middleware(app) -> None:
 
     # 与 agent-service 校验对齐：生产环境禁止通配来源（任意源 + 凭证 = 安全风险）
     if settings.SERVER_ENVIRONMENT == "production" and "*" in allow_origins:
-        raise ValueError(
-            "生产环境 CORS_ALLOW_ORIGINS 不能为 *，请显式配置允许的域名列表"
-        )
+        raise ValueError("生产环境 CORS_ALLOW_ORIGINS 不能为 *，请显式配置允许的域名列表")
 
     # 通配来源与凭证互斥：浏览器禁止 ACAO:* 携带凭证，且"任意源+凭证"等于任意站点可携凭证请求
     if "*" in allow_origins and allow_credentials:

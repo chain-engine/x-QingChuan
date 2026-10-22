@@ -475,7 +475,7 @@ class MilvusVectorStore(VectorStoreBase):
                 search_params={"metric_type": self._metric_type},
             )
             formatted: list[dict[str, Any]] = []
-            for hit in (results[0] if results else []):
+            for hit in results[0] if results else []:
                 entity = hit.get("entity") or {}
                 metadata = {k: v for k, v in entity.items() if k != "text"}
                 distance = hit.get("distance", 0.0)
@@ -546,9 +546,7 @@ class MilvusVectorStore(VectorStoreBase):
             )
             formatted: list[dict[str, Any]] = []
             for entity in results or []:
-                metadata = {
-                    k: v for k, v in entity.items() if k not in ("id", "text", "vector")
-                }
+                metadata = {k: v for k, v in entity.items() if k not in ("id", "text", "vector")}
                 formatted.append(
                     {
                         "id": str(entity.get("id", "")),

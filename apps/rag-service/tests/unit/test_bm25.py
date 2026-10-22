@@ -7,6 +7,7 @@
 - 持久化 round-trip（含旧格式兼容）；
 - 按文档 ID 删除（原"空查询取全部"hack 已废弃，改 get_all）。
 """
+
 from __future__ import annotations
 
 import json
@@ -41,7 +42,9 @@ def temp_dir():
 @pytest.fixture
 def store(temp_dir):
     store = BM25IndexStore(
-        persist_directory=temp_dir, index_name="test", persist_every=0  # 每次落盘，便于断言
+        persist_directory=temp_dir,
+        index_name="test",
+        persist_every=0,  # 每次落盘，便于断言
     )
     store.initialize()
     yield store
@@ -62,7 +65,9 @@ class TestIncrementalAddSearch:
     def test_multiple_incremental_adds(self, store: BM25IndexStore) -> None:
         # 分多次增量写入（模拟批量上传分片）
         for i in range(0, len(CORPUS), 3):
-            _add_docs(store, [f"doc_{j}" for j in range(i, min(i + 3, len(CORPUS)))], CORPUS[i : i + 3])
+            _add_docs(
+                store, [f"doc_{j}" for j in range(i, min(i + 3, len(CORPUS)))], CORPUS[i : i + 3]
+            )
         assert store.get_count() == len(CORPUS)
         results = store.search("检索", top_k=10)
         assert len(results) >= 2  # doc_0 与 doc_3 均含"检索"

@@ -85,9 +85,7 @@ class TestDocumentRepositoryIntegration:
         # 翻页无重叠
         page2, _ = repository.list_page(skip=4, limit=4)
         assert len(page2) == 4
-        assert {d["document_id"] for d in page1}.isdisjoint(
-            {d["document_id"] for d in page2}
-        )
+        assert {d["document_id"] for d in page1}.isdisjoint({d["document_id"] for d in page2})
 
         # skip 越界返回空页
         beyond, total_beyond = repository.list_page(skip=100, limit=4)
@@ -100,9 +98,7 @@ class TestDocumentRepositoryIntegration:
         assert all(d["status"] == "completed" for d in completed)
 
         # 过滤 + 分页组合
-        failed_page, total_failed = repository.list_page(
-            status="failed", skip=0, limit=2
-        )
+        failed_page, total_failed = repository.list_page(status="failed", skip=0, limit=2)
         assert total_failed >= 5
         assert len(failed_page) == 2
         assert all(d["status"] == "failed" for d in failed_page)

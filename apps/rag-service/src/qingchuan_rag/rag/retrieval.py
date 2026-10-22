@@ -202,11 +202,7 @@ class Retrieval:
         self._check_initialized()
         stats = self._pipeline.get_stats()
         stats_info = stats.get("candidate_stats", {})
-        return sum(
-            stat.get("count", 0)
-            for stat in stats_info.values()
-            if isinstance(stat, dict)
-        )
+        return sum(stat.get("count", 0) for stat in stats_info.values() if isinstance(stat, dict))
 
     def _check_initialized(self) -> None:
         """检查是否已初始化"""

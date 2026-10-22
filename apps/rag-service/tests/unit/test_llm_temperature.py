@@ -4,6 +4,7 @@
 - 显式 0.0 / 0.3 → 必须原样使用；
 - 未传 / 显式 None → 回退全局默认 settings.TEMPERATURE。
 """
+
 from __future__ import annotations
 
 import pytest

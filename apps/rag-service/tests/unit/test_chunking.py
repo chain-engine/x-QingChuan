@@ -3,6 +3,7 @@
 semantic 策略使用确定性 Mock embeddings 验证断点逻辑（不加载真实模型）；
 缺省 embeddings 的懒加载路径仅验证"构造不触发模型加载"。
 """
+
 from __future__ import annotations
 
 import pytest

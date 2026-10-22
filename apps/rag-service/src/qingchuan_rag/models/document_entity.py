@@ -43,11 +43,12 @@ class DocumentEntity(Base):
         Integer, nullable=False, default=0, comment="文件大小（字节）"
     )
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending", comment="处理状态 pending/processing/completed/failed"
+        String(20),
+        nullable=False,
+        default="pending",
+        comment="处理状态 pending/processing/completed/failed",
     )
-    chunk_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, comment="切分块数"
-    )
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="切分块数")
     # 内容对象引用：对象存储 key（本地存储为 data 目录下相对路径）
     content_key: Mapped[str] = mapped_column(
         String(512), nullable=False, default="", comment="内容对象存储键（对象存储/本地相对路径）"

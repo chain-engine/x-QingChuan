@@ -162,7 +162,9 @@ class StorageProvider(ABC):
         """
         safe_name = os.path.basename(filename)
         stem, ext = os.path.splitext(safe_name)
-        digest = hashlib.sha1(f"{datetime.now(UTC).isoformat()}:{safe_name}".encode()).hexdigest()[:12]
+        digest = hashlib.sha1(f"{datetime.now(UTC).isoformat()}:{safe_name}".encode()).hexdigest()[
+            :12
+        ]
         unique_name = f"{stem}-{digest}{ext}"
         folder_clean = folder.strip("/")
         if folder_clean:
@@ -186,7 +188,10 @@ class LocalStorage(StorageProvider):
         self.base_dir = Path(resolve_service_path(base_dir)).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.public_prefix = public_prefix.rstrip("/")
-        logger.info(f"LocalStorage initialized: base_dir={self.base_dir} public_prefix={self.public_prefix}")
+        logger.info(
+            f"LocalStorage initialized: base_dir={self.base_dir} public_prefix={self.public_prefix}"
+        )
+
     def upload_file(
         self,
         data: bytes | BinaryIO,
@@ -208,7 +213,9 @@ class LocalStorage(StorageProvider):
         target.write_bytes(content)
         url = f"{self.public_prefix}/{key.lstrip('/')}"
         logger.info(f"LocalStorage upload: key={key} size={len(content)}")
-        return UploadResult(key=key, url=url, size=len(content), storage="local", content_type=content_type)
+        return UploadResult(
+            key=key, url=url, size=len(content), storage="local", content_type=content_type
+        )
 
     def get_download_url(self, key: str, *, expires: int = 3600) -> str:
         """返回本地相对路径（由静态文件中间件直接服务）。"""
@@ -288,7 +295,9 @@ class S3CompatibleStorage(StorageProvider):
             use_ssl=use_ssl,
             config=s3_config,
         )
-        logger.info(f"S3CompatibleStorage initialized: bucket={bucket} endpoint={endpoint_url} region={region}")
+        logger.info(
+            f"S3CompatibleStorage initialized: bucket={bucket} endpoint={endpoint_url} region={region}"
+        )
 
     def _full_key(self, key: str) -> str:
         """拼接 prefix。"""
@@ -369,10 +378,17 @@ def get_storage_provider() -> StorageProvider:
     storage_cfg = settings.storage
     if storage_cfg.provider == "s3":
         if not all(
-            [storage_cfg.s3_endpoint_url, storage_cfg.s3_access_key, storage_cfg.s3_secret_key, storage_cfg.s3_bucket]
+            [
+                storage_cfg.s3_endpoint_url,
+                storage_cfg.s3_access_key,
+                storage_cfg.s3_secret_key,
+                storage_cfg.s3_bucket,
+            ]
         ):
             logger.warning("S3 storage selected but credentials incomplete, falling back to local")
-            return LocalStorage(base_dir=storage_cfg.base_dir, public_prefix=storage_cfg.public_prefix)
+            return LocalStorage(
+                base_dir=storage_cfg.base_dir, public_prefix=storage_cfg.public_prefix
+            )
         return S3CompatibleStorage(
             endpoint_url=storage_cfg.s3_endpoint_url,
             access_key=storage_cfg.s3_access_key,

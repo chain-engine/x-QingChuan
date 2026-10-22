@@ -4,6 +4,7 @@
 - CORS：通配来源自动关闭 credentials（浏览器禁止"*"+凭证）；生产环境禁止通配来源（与 agent 对齐）；
 - get_vector_count：多路候选 provider 求和（原实现只返回第一个）。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -24,9 +25,7 @@ def cors_env(monkeypatch) -> None:
 
 class TestCorsMiddleware:
     def test_cors_origins_parse(self, cors_env, monkeypatch) -> None:
-        monkeypatch.setattr(
-            settings.cors, "allow_origins", "http://a.com, http://b.com"
-        )
+        monkeypatch.setattr(settings.cors, "allow_origins", "http://a.com, http://b.com")
         assert get_cors_origins() == ["http://a.com", "http://b.com"]
 
     def test_cors_origins_default_wildcard(self, cors_env) -> None:
@@ -37,9 +36,7 @@ class TestCorsMiddleware:
         app = Starlette()
         setup_cors_middleware(app)
 
-        cors_middlewares = [
-            m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
-        ]
+        cors_middlewares = [m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
         assert cors_middlewares, "应注册 CORSMiddleware"
         kwargs = cors_middlewares[0].kwargs
         assert "*" in kwargs["allow_origins"]
@@ -47,15 +44,11 @@ class TestCorsMiddleware:
 
     def test_explicit_origins_keep_credentials(self, cors_env, monkeypatch) -> None:
         """显式来源列表时允许携带凭证"""
-        monkeypatch.setattr(
-            settings.cors, "allow_origins", "http://localhost:3000"
-        )
+        monkeypatch.setattr(settings.cors, "allow_origins", "http://localhost:3000")
         app = Starlette()
         setup_cors_middleware(app)
 
-        cors_middlewares = [
-            m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
-        ]
+        cors_middlewares = [m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"]
         kwargs = cors_middlewares[0].kwargs
         assert kwargs["allow_origins"] == ["http://localhost:3000"]
         assert kwargs["allow_credentials"] is True

@@ -92,8 +92,7 @@ class RedisEventBus(EventBus):
             payload = json.dumps(asdict(message), ensure_ascii=False)
             await self._client.publish(self._channel, payload)
             logger.info(
-                f"[EventBus] publish type={message.event_type} "
-                f"source={message.source_agent}"
+                f"[EventBus] publish type={message.event_type} source={message.source_agent}"
             )
         except Exception as exc:  # 总线异常不阻断业务（事件已落库留痕）
             logger.warning(f"[EventBus] Redis publish failed: {exc}")
@@ -110,9 +109,7 @@ class RedisEventBus(EventBus):
         try:
             await self._pubsub.subscribe(self._channel)
             while True:
-                raw = await self._pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=1.0
-                )
+                raw = await self._pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if raw is None:
                     continue
                 message = _decode_message(raw.get("data"))

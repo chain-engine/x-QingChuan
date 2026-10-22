@@ -212,9 +212,7 @@ class DocumentRepository(BaseRepository):
             if file_type:
                 conditions.append(DocumentEntity.file_type == file_type)
 
-            total = session.scalar(
-                select(func.count(DocumentEntity.id)).where(*conditions)
-            ) or 0
+            total = session.scalar(select(func.count(DocumentEntity.id)).where(*conditions)) or 0
 
             stmt = (
                 select(DocumentEntity)

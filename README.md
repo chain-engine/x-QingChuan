@@ -10,7 +10,7 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-1C3C3C)
 ![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-1C3C3C?logo=langchain&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-2.3%2B-24292F)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4%2B-F97316)
+![Milvus](https://img.shields.io/badge/Milvus-2.x-00A1EA)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![APScheduler](https://img.shields.io/badge/APScheduler-3.10%2B-2C3E50)
@@ -53,7 +53,7 @@ uv run qingchuan-agent-api
 
 访问 <http://127.0.0.1:8020>，详见 [agent-service/README.md](apps/agent-service/README.md)。
 
-> **Docker 一键部署**：`docker compose up --build`；环境要求、依赖同步（`uv sync --all-packages`）、环境配置等详细步骤，见上述各服务 README。
+> **Docker 一键部署（彻底独立）**：`docker compose up -d --build` 会一次性编排 MySQL、Redis、rag-service、agent-service 四个服务（内部网络互通，不依赖宿主机已有的 MySQL/Redis）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020。详细步骤见各服务 README。
 
 ## 📁 项目结构
 
@@ -94,7 +94,7 @@ x-QingChuan/
 │       │   └── core/                   # 核心基础设施（config / logger / exceptions / middleware）
 │       ├── tests/                      # 单元 / 集成 / API 测试
 │       ├── scripts/                    # HTTP / MCP 客户端脚本（qingchuan_http_client.py / qingchuan_mcp_client.py）
-│       ├── data/                       # 运行数据（chroma / bm25 / documents / db）
+│       ├── data/                       # 运行数据（milvus / bm25 / documents / db）
 │       ├── Dockerfile
 │       └── pyproject.toml              # qingchuan-rag
 ├── packages/
@@ -138,7 +138,7 @@ flowchart TB
 
     subgraph INFRA["基础设施"]
         D1[("MySQL 业务库")]
-        D2[("Chroma 向量库")]
+        D2[("Milvus 向量库")]
         D3[("BM25 稀疏索引")]
         D4["LLM Provider（OpenAI 兼容）"]
         D5["人社数据源（API）"]
@@ -184,7 +184,7 @@ flowchart LR
     subgraph OFFLINE["离线索引流水线"]
         S1["人社数据同步<br/>(CLI / APScheduler / HTTP 触发)"] --> S2["文本切分"]
         S2 --> S3["向量化（bge-m3）"]
-        S3 --> S4["向量库 Chroma + BM25 索引"]
+        S3 --> S4["向量库 Milvus + BM25 索引"]
     end
 
     subgraph ONLINE["在线问答"]
@@ -206,7 +206,7 @@ flowchart LR
 | 注册 / 路由 | AgentRegistry | task_type → AgentSpec 映射表路由，惰性编译缓存 |
 | LLM 接入 | LangChain（OpenAI 兼容） | DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo |
 | MCP | mcp 2.3+ | rag-service Streamable HTTP（/mcp）；agent 经 MCP 客户端调用 |
-| 向量检索 | ChromaDB + sentence-transformers（BAAI/bge-m3） | 稠密索引，持久化于 `data/chroma` |
+| 向量检索 | Milvus（本地 milvus-lite）+ sentence-transformers（BAAI/bge-m3） | 稠密索引，持久化于 `data/milvus.db` |
 | 稀疏检索 | rank-bm25 | BM25 索引，与向量检索混合 |
 | 业务库 | SQLAlchemy 2 + PyMySQL（MySQL 8） | 审计日志 / 同步任务 / Agent 任务与事件 |
 | 周期调度 | APScheduler | 人社同步 cron（默认每日 03:00） |
@@ -224,7 +224,7 @@ flowchart LR
 | Agent 编排 | LangGraph 0.2+（顶层图 + 业务子图，interrupt / resume） |
 | LLM 接入 | LangChain（langchain-core 0.3+ / langchain-openai 0.2+，OpenAI 兼容协议） |
 | MCP | mcp 2.3+（Streamable HTTP） |
-| 向量数据库 | ChromaDB 0.4+ |
+| 向量数据库 | Milvus 2.x（本地 milvus-lite；生产接远程 Milvus） |
 | 向量嵌入 | sentence-transformers（BAAI/bge-m3） |
 | 稀疏检索 | rank-bm25 0.2+ |
 | 业务数据库 | MySQL 8.0（SQLAlchemy 2 + PyMySQL；本地可 SQLite） |

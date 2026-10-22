@@ -131,9 +131,7 @@ class BM25IndexStore:
             index_file = os.path.join(self.persist_directory, f"{self.index_name}.json")
             if os.path.exists(index_file):
                 self._load_from_disk(index_file)
-                logger.info(
-                    f"BM25IndexStore loaded from {index_file}: {len(self._docs)} documents"
-                )
+                logger.info(f"BM25IndexStore loaded from {index_file}: {len(self._docs)} documents")
             else:
                 logger.info("BM25IndexStore initialized (empty index)")
             self._initialized = True

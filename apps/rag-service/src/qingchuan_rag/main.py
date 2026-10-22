@@ -65,7 +65,9 @@ async def lifespan(app: FastAPI):
             StaticFiles(directory=doc_repo.storage.base_dir),
             name="storage-files",
         )
-        logger.info(f"Static files mounted: {doc_repo.storage.public_prefix} -> {doc_repo.storage.base_dir}")
+        logger.info(
+            f"Static files mounted: {doc_repo.storage.public_prefix} -> {doc_repo.storage.base_dir}"
+        )
 
     # 初始化 BM25 Repository层（稀疏索引）
     bm25_repo = BM25Repository(

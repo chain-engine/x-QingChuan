@@ -76,9 +76,13 @@ class LLMGeneration:
 
         try:
             # 调用 infras.llm 模块
+            # 显式传入 0.0（确定性输出）必须原样传递，不能被 `or` 吞掉回退默认值
+            effective_temperature = (
+                temperature if temperature is not None else self._default_temperature
+            )
             response = self._provider.invoke(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=temperature or self._default_temperature,
+                temperature=effective_temperature,
             )
 
             # 提取响应内容
@@ -115,9 +119,12 @@ class LLMGeneration:
             self._provider = get_llm_provider(target_provider)
 
         try:
+            effective_temperature = (
+                temperature if temperature is not None else self._default_temperature
+            )
             for chunk in self._provider.stream(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=temperature or self._default_temperature,
+                temperature=effective_temperature,
             ):
                 if hasattr(chunk, "content"):
                     yield chunk.content
