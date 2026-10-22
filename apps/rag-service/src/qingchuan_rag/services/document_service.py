@@ -15,6 +15,7 @@ from qingchuan_rag.core.exceptions import DocumentError
 from qingchuan_rag.core.logger import logger
 from qingchuan_rag.infras.chunking import get_chunking_provider
 from qingchuan_rag.infras.embedding import BGEEmbeddingModel
+from qingchuan_rag.infras.parsers import sanitize_metadata
 from qingchuan_rag.repositories.bm25_repository import BM25Repository
 from qingchuan_rag.repositories.document_repository import DocumentRepository
 from qingchuan_rag.repositories.vector_repository import VectorRepository
@@ -160,8 +161,9 @@ class DocumentService(BaseService):
         """
         self._check_initialized()
 
-        if metadata is None:
-            metadata = {}
+        # 元数据规范化：Chroma 只接受 str/int/float/bool 标量，
+        # list/dict 等结构化为 JSON 字符串（见 infras/parsers.py）
+        metadata = sanitize_metadata(metadata)
 
         document_id = str(uuid.uuid4())
 

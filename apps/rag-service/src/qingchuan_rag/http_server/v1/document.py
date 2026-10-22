@@ -17,6 +17,7 @@ from qingchuan_rag.http_server.dependencies import (
     get_document_service,
 )
 from qingchuan_rag.http_server.response import success_response
+from qingchuan_rag.infras.parsers import decode_text_content, extract_pdf_text
 from qingchuan_rag.schemas.responses import ResponseModel
 from qingchuan_rag.services.document_service import DocumentService
 
@@ -42,10 +43,11 @@ async def upload_document(
 
         content = await file.read()
 
-        text = _decode_content(content)
-
         file_name = file.filename or "unknown"
         file_type = file_name.split(".")[-1].lower() if "." in file_name else "txt"
+
+        # 按文件类型解析：PDF 走 PyMuPDF 文本提取；其余按文本文件解码（utf-8 / gbk）
+        text = extract_pdf_text(content) if file_type == "pdf" else decode_text_content(content)
 
         operator = get_app_operator_context(request)
         result = document_service.upload_document(
@@ -239,14 +241,3 @@ def _parse_metadata(metadata: str) -> dict[str, Any]:
         return json.loads(metadata) if metadata else {}
     except json.JSONDecodeError as e:
         raise ValidationError("Invalid metadata JSON format") from e
-
-
-def _decode_content(content: bytes) -> str:
-    """解码文件内容"""
-    try:
-        return content.decode("utf-8")
-    except UnicodeDecodeError:
-        try:
-            return content.decode("gbk")
-        except Exception as e:
-            raise DocumentError(f"Unsupported file encoding: {e}") from e

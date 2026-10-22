@@ -50,7 +50,7 @@ class AgentRuntime:
             return self._checkpointer
         settings = get_settings()
         if settings.agent.checkpoint == "redis":
-            from qingchuan_agent.infras.redis_client import (
+            from qingchuan_agent.infras.redis import (
                 get_sync_redis_client,
                 redis_available,
             )

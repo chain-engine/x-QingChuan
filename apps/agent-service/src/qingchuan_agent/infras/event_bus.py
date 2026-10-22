@@ -79,7 +79,7 @@ class RedisEventBus(EventBus):
         client: Any | None = None,
         channel: str = DEFAULT_CHANNEL,
     ) -> None:
-        from qingchuan_agent.infras.redis_client import get_async_redis_client
+        from qingchuan_agent.infras.redis import get_async_redis_client
 
         self._client = client if client is not None else get_async_redis_client()
         self._channel = channel
@@ -173,7 +173,7 @@ def get_event_bus() -> EventBus:
     """获取全局事件总线单例（按 Redis 可用性选择实现）。"""
     global _event_bus
     if _event_bus is None:
-        from qingchuan_agent.infras.redis_client import redis_available
+        from qingchuan_agent.infras.redis import redis_available
 
         if get_settings().redis.enabled and redis_available():
             _event_bus = RedisEventBus()

@@ -37,7 +37,7 @@ def test_checkpointer_redis_unavailable_falls_back():
 
 def test_checkpointer_redis_real(monkeypatch):
     """checkpoint=redis + Redis 可用 → RedisSaver（本地 Redis 不可用时跳过）。"""
-    from qingchuan_agent.infras.redis_client import (
+    from qingchuan_agent.infras.redis import (
         _reset_redis_clients,
         close_redis,
         init_redis,
