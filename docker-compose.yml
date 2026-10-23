@@ -1,15 +1,15 @@
 name: x-qingchuan
 
 # 晴川（QingChuan）生产 Docker Compose 配置
-# 参考已部署的汉江（x-HanJiang）同一台阿里云主机的部署形态，保持一致的生产纪律。
+# 生产部署形态：Docker Compose 编排 + 根目录 .env 注入凭据 + 容器健康检查。
 #
-# 单机共存端口规划（汉江已占用：80 nginx / 3307 mysql / 6380 redis）：
+# 端口规划：
 #   - mysql  13306:3306   运维口（服务间走内部网络，如无需外部直连可去掉 ports）
 #   - redis  16379:6379   运维口（同上）
 #   - rag    8010:8010    对外服务口（阿里云安全组需放行）
 #   - agent  8020:8020    对外服务口（阿里云安全组需放行）
 #
-# 生产注意（对齐汉江）：
+# 生产注意：
 #   1. 所有凭据经根目录 .env 注入，${VAR:?} 必填，缺项启动即报错，禁止硬编码
 #   2. LLM 密钥仅经环境变量注入，不落镜像 / 代码（两服务 LLM 相互独立）
 #   3. 生产模式（agent 侧 QINGCHUAN_AGENT_APP_ENV=production）强制启用 Redis 与 redis checkpoint
