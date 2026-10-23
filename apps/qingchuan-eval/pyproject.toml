@@ -1,0 +1,60 @@
+[project]
+name = "qingchuan-eval"
+version = "0.1.0"
+description = "晴川 RAG 评测工具：golden set 回归 + 确定性指标（CLI + HTTP），为 RAGAS 深度评测预留扩展位"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT" }
+keywords = ["rag", "evaluation", "golden-set", "regression", "hrss"]
+
+dependencies = [
+  "pydantic>=2.5.0",
+  "httpx>=0.27.0",
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+]
+
+[project.scripts]
+qingchuan-eval = "qingchuan_eval.cli:main"
+qingchuan-eval-server = "qingchuan_eval.http_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qingchuan_eval"]
+
+[dependency-groups]
+dev = [
+  "pytest>=7.4.0",
+  "ruff>=0.1.5",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+# 与根 pyproject 对齐：中文文档/注释使用全角标点属正常书写
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# scripts/ 为数据构建与冒烟脚本，长行（中文数据表/长句）豁免 E501
+"scripts/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-ra", "--strict-markers"]
+markers = [
+  "slow: marks tests as slow",
+]
