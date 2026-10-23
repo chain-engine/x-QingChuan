@@ -1,114 +1,197 @@
 name: x-qingchuan
 
-# 彻底独立部署：mysql / redis / rag-service / agent-service 全部由本 compose 编排，
-# 服务间通过 compose 内部网络（服务名）通信，不依赖宿主机已有的 MySQL/Redis 等任何外部服务。
+# 晴川（QingChuan）生产 Docker Compose 配置
+# 参考已部署的汉江（x-HanJiang）同一台阿里云主机的部署形态，保持一致的生产纪律。
+#
+# 单机共存端口规划（汉江已占用：80 nginx / 3307 mysql / 6380 redis）：
+#   - mysql  13306:3306   运维口（服务间走内部网络，如无需外部直连可去掉 ports）
+#   - redis  16379:6379   运维口（同上）
+#   - rag    8010:8010    对外服务口（阿里云安全组需放行）
+#   - agent  8020:8020    对外服务口（阿里云安全组需放行）
+#
+# 生产注意（对齐汉江）：
+#   1. 所有凭据经根目录 .env 注入，${VAR:?} 必填，缺项启动即报错，禁止硬编码
+#   2. LLM 密钥仅经环境变量注入，不落镜像 / 代码（两服务 LLM 相互独立）
+#   3. 生产模式（agent 侧 QINGCHUAN_AGENT_APP_ENV=production）强制启用 Redis 与 redis checkpoint
 #
 # 启动：docker compose up -d --build
 # 停止：docker compose down（保留数据卷）；彻底清理（含数据）：docker compose down -v
-#
-# 宿主端口映射说明（仅用于外部调试/运维访问，服务间不经过宿主端口）：
-#   - mysql  -> 13306:3306（本机 3306 通常已被本地 MySQL 占用，故避开；如无冲突可改回 "3306:3306"）
-#   - redis  -> 16379:6379（同上避开本机 6379）
-#   - rag    -> 8010:8010
-#   - agent  -> 8020:8020
 
 services:
   mysql:
     image: mysql:8.0
+    container_name: x-QingChuan-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: "123456"
-      MYSQL_DATABASE: qingchuan
-      MYSQL_USER: yeyushilai
-      MYSQL_PASSWORD: "123456"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-qingchuan}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
+      - --skip-character-set-client-handshake
+      - --port=3306
     ports:
-      - "13306:3306"
+      - "${MYSQL_HOST_PORT:-13306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 30s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
-    image: redis:7
-    command: ["redis-server", "--requirepass", "123456", "--appendonly", "yes"]
+    image: redis:7-alpine
+    container_name: x-QingChuan-redis
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
-      - "16379:6379"
+      - "${REDIS_HOST_PORT:-16379}:6379"
     volumes:
       - redis-data:/data
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$${REDIS_PASSWORD}", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
-      start_period: 10s
+      start_period: 5s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rag-service:
     build:
       context: .
       dockerfile: apps/rag-service/Dockerfile
+    container_name: x-QingChuan-rag
     environment:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8010
-      # LLM（RAG 服务专用配置；镜像内不含 .env，需在此注入，与 agent-service 完全独立）
-      # MIMO_API_KEY: your-mimo-api-key
-      # MIMO_API_BASE: https://api.xiaomimimo.com/v1
-      # MIMO_MODEL_NAME: mimo-v2.6-pro
-      # 向量存储（milvus-lite 本地文件模式，数据落 rag-data 卷；生产改远程 Milvus 地址）
-      VECTOR_STORE_TYPE: milvus
+      # LLM（RAG 服务专用，经 .env 注入；与 agent-service 的 QINGCHUAN_AGENT_AI_LLM_* 完全独立）
+      MIMO_API_KEY: ${MIMO_API_KEY:-}
+      MIMO_API_BASE: ${MIMO_API_BASE:-https://api.xiaomimimo.com/v1}
+      MIMO_MODEL_NAME: ${MIMO_MODEL_NAME:-mimo-v2.6-pro}
+      # 向量存储（milvus-lite 本地文件模式，数据落 rag-data 卷；生产可改远程 Milvus 地址）
+      VECTOR_STORE_TYPE: ${VECTOR_STORE_TYPE:-milvus}
       VECTOR_STORE_MILVUS_URI: /app/data/milvus.db
-      VECTOR_STORE_COLLECTION_NAME: documents
-      VECTOR_STORE_DISTANCE: cosine
-      VECTOR_STORE_DIMENSION: 1024
-      # 业务数据库（审计 / 同步任务状态）→ compose 内部 mysql 服务；首次启动自动建表（幂等）
-      DATABASE_URL: mysql+pymysql://yeyushilai:123456@mysql:3306/qingchuan?charset=utf8mb4
-      # 人社数据源与周期调度（生产必填）
-      # SYNC_ENABLED: "true"
-      # SYNC_CRON: "0 3 * * *"
-      # HRSS_API_URL: https://hrss.example.com/api
-      # HRSS_API_TOKEN: your-token
+      VECTOR_STORE_COLLECTION_NAME: ${VECTOR_STORE_COLLECTION_NAME:-documents}
+      VECTOR_STORE_DISTANCE: ${VECTOR_STORE_DISTANCE:-cosine}
+      VECTOR_STORE_DIMENSION: ${VECTOR_STORE_DIMENSION:-1024}
+      # 业务数据库（审计 / 同步任务 / 文档元数据）→ compose 内部 mysql；首次启动自动建表（幂等）
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-qingchuan}?charset=utf8mb4
+      # 人社数据源与周期调度（生产按需开启）
+      SYNC_ENABLED: ${SYNC_ENABLED:-false}
+      SYNC_CRON: ${SYNC_CRON:-0 3 * * *}
+      HRSS_API_URL: ${HRSS_API_URL:-}
+      HRSS_API_TOKEN: ${HRSS_API_TOKEN:-}
     ports:
       - "8010:8010"
     volumes:
-      - rag-data:/app/data
+      - rag-data:/app/data          # milvus.db + 文档对象存储（documents/）
+      - rag-logs:/app/apps/rag-service/logs
+    networks:
+      - backend
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, socket; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8010/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"              # torch 推理预留
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   agent-service:
     build:
       context: .
       dockerfile: apps/agent-service/Dockerfile
+    container_name: x-QingChuan-agent
     environment:
+      # 生产模式：强制 Redis 启用 + redis checkpoint（见 core/config.py validate）
+      QINGCHUAN_AGENT_APP_ENV: production
+      QINGCHUAN_AGENT_AGENT_CHECKPOINT: redis
+      QINGCHUAN_AGENT_SERVER_DEBUG: "false"   # 生产校验：禁止 DEBUG
+      QINGCHUAN_AGENT_SERVER_HOST: 0.0.0.0
+      QINGCHUAN_AGENT_SERVER_PORT: 8020
+      # 生产校验禁止 CORS "*"：显式配置允许来源（pydantic list 类型，须用 JSON 数组格式；
+      # 生产域名在 .env 中通过 QINGCHUAN_AGENT_CORS_ORIGINS 覆盖，如 ["https://admin.example.com"]）
+      QINGCHUAN_AGENT_CORS_ORIGINS: ${QINGCHUAN_AGENT_CORS_ORIGINS:-["http://localhost:5173","http://127.0.0.1:5173"]}
       # RAG 服务地址（compose 内部网络；独立部署不使用宿主 127.0.0.1）
       QINGCHUAN_AGENT_RAG_MCP_URL: http://rag-service:8010/mcp
       QINGCHUAN_AGENT_RAG_HTTP_BASE_URL: http://rag-service:8010
-      QINGCHUAN_AGENT_SERVER_HOST: 0.0.0.0
-      QINGCHUAN_AGENT_SERVER_PORT: 8020
-      # LLM（Agent 服务专用配置，独立于 rag-service 的 MIMO_*；OpenAI 兼容接口，可换任意厂商）
-      # QINGCHUAN_AGENT_AI_LLM_API_KEY: your-key
-      # QINGCHUAN_AGENT_AI_LLM_BASE_URL: https://api.xiaomimimo.com/v1
-      # QINGCHUAN_AGENT_AI_LLM_MODEL: mimo-v2.6-pro
-      # 任务/事件持久化 → compose 内部 mysql 服务（enabled=true，与 rag-service 同库分表）
+      # LLM（Agent 服务专用，经 .env 注入；OpenAI 兼容接口，可换任意厂商）
+      QINGCHUAN_AGENT_AI_LLM_API_KEY: ${QINGCHUAN_AGENT_AI_LLM_API_KEY:-}
+      QINGCHUAN_AGENT_AI_LLM_BASE_URL: ${QINGCHUAN_AGENT_AI_LLM_BASE_URL:-https://api.xiaomimimo.com/v1}
+      QINGCHUAN_AGENT_AI_LLM_MODEL: ${QINGCHUAN_AGENT_AI_LLM_MODEL:-mimo-v2.6-pro}
+      # 任务 / 事件持久化 → compose 内部 mysql（与 rag-service 同库分表）
       QINGCHUAN_AGENT_DATABASE_ENABLED: "true"
       QINGCHUAN_AGENT_DATABASE_HOST: mysql
       QINGCHUAN_AGENT_DATABASE_PORT: 3306
-      QINGCHUAN_AGENT_DATABASE_USER: yeyushilai
-      QINGCHUAN_AGENT_DATABASE_PASSWORD: "123456"
-      QINGCHUAN_AGENT_DATABASE_DATABASE: qingchuan
-      # Redis（checkpoint / 事件总线）→ compose 内部 redis 服务，3 号库
+      QINGCHUAN_AGENT_DATABASE_USER: ${MYSQL_USER}
+      QINGCHUAN_AGENT_DATABASE_PASSWORD: ${MYSQL_PASSWORD}
+      QINGCHUAN_AGENT_DATABASE_DATABASE: ${MYSQL_DATABASE:-qingchuan}
+      # Redis（checkpoint / 事件总线）→ compose 内部 redis，3 号库
       QINGCHUAN_AGENT_REDIS_ENABLED: "true"
       QINGCHUAN_AGENT_REDIS_HOST: redis
       QINGCHUAN_AGENT_REDIS_PORT: 6379
       QINGCHUAN_AGENT_REDIS_DB: 3
-      QINGCHUAN_AGENT_REDIS_PASSWORD: "123456"
+      QINGCHUAN_AGENT_REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
       - "8020:8020"
+    volumes:
+      - agent-logs:/app/apps/agent-service/logs
+    networks:
+      - backend
     depends_on:
       rag-service:
         condition: service_started
@@ -116,9 +199,34 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, socket; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8020/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mysql-data:
   redis-data:
   rag-data:
+  agent-logs:
+  rag-logs:
+
+networks:
+  backend:
+    driver: bridge
