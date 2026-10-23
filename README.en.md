@@ -53,7 +53,7 @@ uv run qingchuan-agent-api
 
 Access <http://127.0.0.1:8020>. See [agent-service/README.en.md](apps/agent-service/README.en.md).
 
-> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, rag-service and agent-service (internal network only). For Aliyun production deployment (co-existing with x-HanJiang on the same host), see [DEPLOY.md](DEPLOY.md).
+> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, rag-service and agent-service (internal network only). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
 
 ## 📁 Project Structure
 

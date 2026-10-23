@@ -1,25 +1,21 @@
-# 晴川（QingChuan）阿里云部署指南
+# 晴川（QingChuan）部署指南
 
-本文档面向**阿里云单机生产部署**，与已部署的汉江（x-HanJiang）项目**共存于同一台主机**。
-部署形态对齐汉江：Docker Compose 编排 + 根目录 `.env` 注入凭据 + 容器健康检查，全部敏感信息不落镜像/代码。
+本文档面向**阿里云 ECS 生产部署**（Docker Compose 方式）。
+部署形态：Docker Compose 编排 + 根目录 `.env` 注入凭据 + 容器健康检查，敏感信息不落镜像/代码。
 
 ---
 
 ## 1. 部署架构与端口规划
 
-单机内两个项目并存，端口规划如下（**汉江已占用 80 / 3307 / 6380，晴川全部避开**）：
-
-| 端口 | 归属 | 用途 | 说明 |
+| 端口 | 服务 | 用途 | 说明 |
 | --- | --- | --- | --- |
-| 80 | 汉江 nginx | 汉江统一入口 | 晴川不占用 |
-| 3307 / 6380 | 汉江 mysql / redis | 汉江运维口 | 晴川不占用 |
-| **13306** | 晴川 mysql | 运维口（可选） | 服务间走 compose 内部网络，如无需外部直连可去掉 `ports` |
-| **16379** | 晴川 redis | 运维口（可选） | 同上 |
-| **8010** | 晴川 rag-service | **对外服务口（安全组放行）** | MCP 挂 `/mcp`，HTTP 挂 `/api/v1` |
-| **8020** | 晴川 agent-service | **对外服务口（安全组放行）** | HTTP 挂 `/api/v1` |
+| 13306 | mysql | 运维口（可选） | 服务间走 compose 内部网络，如无需外部直连可去掉 `ports` |
+| 16379 | redis | 运维口（可选） | 同上 |
+| **8010** | rag-service | **对外服务口（安全组放行）** | MCP 挂 `/mcp`，HTTP 挂 `/api/v1` |
+| **8020** | agent-service | **对外服务口（安全组放行）** | HTTP 挂 `/api/v1` |
 
-> 容器命名均带 `x-QingChuan-` 前缀，与汉江（`x-HanJiang-`）不冲突；两个 compose 各自创建独立 bridge 网络，互不干扰。
-> 同库共用：晴川 mysql（13306）、redis（16379）均为本 compose 自管，不依赖宿主机/汉江的数据库实例。
+> mysql / redis / rag-service / agent-service 全部由本 compose 编排，内部网络互通，不依赖宿主机其他服务。
+> 数据卷 `mysql-data` / `redis-data` / `rag-data` / `agent-logs` / `rag-logs` 持久化，容器重建不丢数据。
 
 **阿里云 ECS 安全组需放行**：`8010`、`8020`（如开放运维口再加 `13306`、`16379`；建议运维口仅对管理员 IP 开放）。
 
@@ -28,34 +24,69 @@
 ## 2. 前置条件
 
 - 阿里云 ECS：2 核 4G 及以上（rag-service 为 torch 推理，建议 4 核 8G）
-- Docker Engine + Docker Compose v2（与汉江相同的运行环境）
-- 仓库代码（部署机直接 `git clone` 或拉取最新 commit）
+- Docker Engine + Docker Compose v2
+- 仓库代码部署在 `/opt/x-QingChuan`（与现有服务同目录惯例）
 
 ---
 
 ## 3. 部署步骤
 
-### 3.1 准备环境文件
+### 3.1 拉取代码
 
 ```bash
-cd x-QingChuan
-cp .env.example .env
-vim .env   # 填写以下必填项与密钥
+cd /opt
+git clone https://github.com/chain-engine/x-QingChuan.git
+cd /opt/x-QingChuan
 ```
 
-`.env` 必填/常用键（完整清单见 `.env.example`）：
+### 3.2 准备环境文件
+
+```bash
+cat > .env <<'EOF'
+# 部署凭据（生产请改为强密码）
+MYSQL_ROOT_PASSWORD=change-me-root-password
+MYSQL_DATABASE=qingchuan
+MYSQL_USER=qingchuan
+MYSQL_PASSWORD=change-me-db-password
+REDIS_PASSWORD=change-me-redis-password
+# Agent 服务 LLM（前缀 QINGCHUAN_AGENT_AI_LLM_，与 RAG 的 MIMO_* 相互独立）
+QINGCHUAN_AGENT_AI_LLM_API_KEY=sk-your-key
+QINGCHUAN_AGENT_AI_LLM_BASE_URL=https://api.xiaomimimo.com/v1
+QINGCHUAN_AGENT_AI_LLM_MODEL=mimo-v2.6-pro
+# RAG 服务 LLM（小米 Mimo）
+MIMO_API_KEY=sk-your-key
+MIMO_API_BASE=https://api.xiaomimimo.com/v1
+MIMO_MODEL_NAME=mimo-v2.6-pro
+# RAG 向量存储（本地 milvus-lite 文件模式；生产可改远程 Milvus 地址）
+VECTOR_STORE_TYPE=milvus
+VECTOR_STORE_MILVUS_URI=./data/milvus.db
+VECTOR_STORE_COLLECTION_NAME=documents
+VECTOR_STORE_DISTANCE=cosine
+VECTOR_STORE_DIMENSION=1024
+EOF
+```
+
+也可直接 `cp .env.example .env` 后编辑（完整键清单见 `.env.example`）。
+
+必填/常用键说明：
 
 | 键 | 说明 |
 | --- | --- |
-| `MYSQL_ROOT_PASSWORD` | 晴川 MySQL root 密码（必填，勿与汉江共用） |
-| `MYSQL_USER` / `MYSQL_PASSWORD` | 晴川业务库账号密码（必填） |
-| `REDIS_PASSWORD` | 晴川 Redis 密码（必填） |
+| `MYSQL_ROOT_PASSWORD` / `MYSQL_USER` / `MYSQL_PASSWORD` | 业务库账号密码（必填，生产用强密码） |
+| `REDIS_PASSWORD` | Redis 密码（必填，生产用强密码） |
 | `MIMO_API_KEY` | rag-service 大模型密钥（小米 Mimo） |
 | `QINGCHUAN_AGENT_AI_LLM_API_KEY` | agent-service 大模型密钥（独立于 RAG） |
 | `QINGCHUAN_AGENT_CORS_ORIGINS` | agent 允许的跨域来源（生产禁 `*`；pydantic list 类型须用 **JSON 数组**格式，如 `["https://admin.example.com"]`；默认 localhost 开发白名单） |
 | `SYNC_ENABLED` / `HRSS_API_URL` / `HRSS_API_TOKEN` | 人社数据源周期同步（按需开启） |
 
-### 3.2 构建并启动
+### 3.3 确认端口与磁盘
+
+```bash
+ss -lntp | grep -E ':(8010|8020|13306|16379)'   # 应无输出
+df -h /                                          # 需剩余 8G+（两个镜像约 4.5G）
+```
+
+### 3.4 构建并启动
 
 ```bash
 docker compose up -d --build
@@ -63,23 +94,29 @@ docker compose up -d --build
 
 - `mysql` / `redis` 先启动并通过健康检查（约 30s），`rag-service`、`agent-service` 随后启动
 - agent-service 以生产模式运行（`QINGCHUAN_AGENT_APP_ENV=production`），强制启用 Redis + redis checkpoint
+- 首次构建 rag 镜像较大（CPU-only torch，约 3.5GB），视服务器带宽需 5~20 分钟
 - 首次启动自动建表（幂等）：审计日志 / 同步任务 / 文档元数据
 
-### 3.3 验证部署
+### 3.5 验证部署
 
 ```bash
-# 容器健康状态（4 个服务均应为 healthy）
-docker compose ps
-
-# 服务探针
+docker compose ps          # 4 个容器全部 healthy
 curl -s http://localhost:8010/api/v1/health
 curl -s http://localhost:8020/api/v1/health
-
-# 首次使用：导入人社政策种子文档（可选，将 data 目录 JSON 迁移入库）
-docker compose exec rag-service qingchuan-pipeline migrate-documents
 ```
 
-### 3.4 停止 / 清理
+浏览器访问 `http://<ECS公网IP>:8010/docs` 可见 rag 的 Swagger 文档，即公网放行成功。
+
+### 3.6 安全组放行
+
+阿里云控制台 → 实例 → 安全组 → 入方向规则，添加两条：
+
+| 协议 | 端口范围 | 访问来源 | 描述 |
+| --- | --- | --- | --- |
+| 自定义 TCP | `8010/8010` | `0.0.0.0/0`（或本机 IP/32） | qingchuan-rag |
+| 自定义 TCP | `8020/8020` | `0.0.0.0/0`（或本机 IP/32） | qingchuan-agent |
+
+### 3.7 停止 / 清理
 
 ```bash
 docker compose down          # 停止，保留数据卷
@@ -94,10 +131,10 @@ docker compose down -v       # 彻底清理（含 mysql/redis/rag 数据，慎�
 
 - 容器 stdout 日志：`docker logs -f x-QingChuan-agent` / `x-QingChuan-rag`（json-file 轮转 10m×3）
 - 应用文件日志（挂卷持久化）：
-  - agent：`docker volume` 挂载的 `agent-logs`，容器内路径 `/app/apps/agent-service/logs/`
-  - rag：`rag-logs` 卷，容器内路径 `/app/apps/rag-service/logs/`
+  - agent：`agent-logs` 卷，容器内 `/app/apps/agent-service/logs/`
+  - rag：`rag-logs` 卷，容器内 `/app/apps/rag-service/logs/`
 
-### 4.2 数据持久化
+### 4.2 数据持久化与备份
 
 | 数据 | 存储位置 | 备份方式 |
 | --- | --- | --- |
@@ -108,6 +145,7 @@ docker compose down -v       # 彻底清理（含 mysql/redis/rag 数据，慎�
 ### 4.3 升级
 
 ```bash
+cd /opt/x-QingChuan
 git pull
 docker compose up -d --build
 docker compose ps    # 确认全部 healthy
@@ -117,16 +155,7 @@ docker compose ps    # 确认全部 healthy
 
 | 现象 | 处理 |
 | --- | --- |
-| `docker compose up` 报 `VAR is required` | `.env` 缺键，按 3.1 补齐 |
+| `docker compose up` 报 `VAR is required` | `.env` 缺键，按 3.2 补齐 |
 | agent-service 启动失败提示生产校验 | 检查 `.env` 中 Redis 密码与 compose 一致、`QINGCHUAN_AGENT_AGENT_CHECKPOINT=redis` 已生效 |
 | rag-service 健康检查失败 | `docker compose logs rag-service` 查看；多为向量库初始化或 MySQL 连接问题 |
-| 与汉江端口冲突 | 晴川已避开 80/3307/6380；如仍有冲突调整 `MYSQL_HOST_PORT` / `REDIS_HOST_PORT` |
-
----
-
-## 5. 与汉江共存的注意点
-
-1. **凭据隔离**：晴川与汉江使用各自的 MySQL/Redis 实例与密码，不要复用汉江的 `MYSQL_PASSWORD` / `REDIS_PASSWORD`
-2. **端口隔离**：晴川 13306/16379/8010/8020 与汉江 3307/6380/80 不冲突；`docker compose ps` 可同时看到两个项目的容器
-3. **资源预留**：汉江 app 限 2 核 1G，晴川 rag 限 2 核 2G / agent 限 1 核 1G，两项目叠加需主机满足 4 核 8G 及以上
-4. **安全组**：只放行必要端口；若为同一安全组，尽量将晴川运维口（13306/16379）仅对管理员 IP 开放
+| `docker compose` 命令不存在 | 使用 `docker-compose`（v1）或安装 compose v2 插件 |

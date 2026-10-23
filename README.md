@@ -53,7 +53,7 @@ uv run qingchuan-agent-api
 
 访问 <http://127.0.0.1:8020>，详见 [agent-service/README.md](apps/agent-service/README.md)。
 
-> **Docker 部署**：`docker compose up -d --build` 一次性编排 MySQL、Redis、rag-service、agent-service 四个服务（内部网络互通）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020。阿里云生产部署（与汉江同机共存）详见 [DEPLOY.md](DEPLOY.md)。
+> **Docker 部署**：`docker compose up -d --build` 一次性编排 MySQL、Redis、rag-service、agent-service 四个服务（内部网络互通）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020。阿里云生产部署详见 [DEPLOY.md](DEPLOY.md)。
 
 ## 📁 项目结构
 
