@@ -62,6 +62,17 @@ curl -X POST http://127.0.0.1:8030/eval/run \
 - `chunk_index` 为可选精确引用（冻结 KB 状态时使用）；
 - `difficulty`：`single_hop`（单跳事实）/ `multi_hop`（多跳）/ `boundary`（边界与否定）/ `filtered`（需要元数据过滤）。
 
+## 首批 golden set（113 条）
+
+- 语料（`data/corpus/`）：8 份权威来源，含湖北省 2025 社保缴费基数标准通知（鄂人社发〔2025〕28号）、
+  2025 年度缴费工资申报通告、缴费基数热点问答、人社部养老保险集中答疑、实施《社会保险法》若干规定、
+  渐进式延迟法定退休年龄决定、武汉市基本医疗保险保障政策明白卡、失业保险金申领指南；
+- 分布：养老保险 32 / 医疗保险 34 / 缴费基数申报 13 / 延迟退休 12 / 失业保险 11 / 工伤保险 6 / 基金管理经办 5；
+  难度：single_hop 61 / filtered 21 / boundary 19 / multi_hop 12；
+- **可再生成**：`uv run python scripts/build_golden_set.py`（构建脚本内逐条校验 snippet 与语料逐字一致）；
+- **离线冒烟**：`uv run python scripts/mock_rag_service.py`（模拟 `/api/v1/rag/retrieve|query`，
+  便于无真实服务时验证评测链路）。
+
 ## 指标口径
 
 - `hit@k`：前 k 个检索结果中是否命中 gold（样本级 0/1，聚合取均值）
