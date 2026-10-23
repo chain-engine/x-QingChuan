@@ -10,15 +10,24 @@
     orchestrator.py  顶层调度中枢编排图（节点 + 条件边："怎么干"）
     routing/         路由决策器（explicit / llm / hybrid）
     tools/           工具注册中心（权限：只读可直调 / 写由人工执行）
+    common/          公共编排能力（payload 提取 / 上下文组装 / todo 占位 / LLM 调用）
 
-业务层（编排单元）：
-    agent_a 等       业务 Agent / 工作流模块（模块内完成注册，子图惰性编译）
+业务层（编排单元，五大分类，目录结构保持一致）：
+    content/           内容创作 Agent（选题 → 生成 → 审核）
+    customer_service/  问答（客服）Agent（原 Agent A 更名：检索 → 生成）
+    security/          安全 Agent（采集 → 风险分析 → 告警）
+    data_analysis/     数据分析 Agent（取数 → 分析 → 报告）
+    data_monitor/      数据监控 Agent（查询 → 判定 → 通知）
 
-新增业务 Agent：在本包新建模块并在此显式导入即可，无需改编排层。
+新增业务 Agent：在本包新建同构目录并在此显式导入即可，无需改编排层。
 """
 
 from qingchuan_agent.agents import (
-    agent_a,
+    content,
+    customer_service,
+    data_analysis,
+    data_monitor,
+    security,
     tools,
 )
 from qingchuan_agent.agents.base import BaseAgent
@@ -33,8 +42,12 @@ __all__ = [
     "AgentTaskState",
     "BaseAgent",
     "OrchestratorState",
-    "agent_a",
     "agent_registry",
+    "content",
+    "customer_service",
+    "data_analysis",
+    "data_monitor",
     "get_agent_runtime",
+    "security",
     "tools",
 ]

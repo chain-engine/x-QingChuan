@@ -26,12 +26,14 @@ class BaseAgent(ABC):
         agent_type   —— 注册表路由键（AgentType 枚举）
         name         —— 展示名
         description  —— 职责说明
+        routing_hint —— 路由提示（LLM 动态路由构造候选；缺省回退 description）
         build()      —— 构建并返回编译好的子图
     """
 
     agent_type: AgentType
     name: str = ""
     description: str = ""
+    routing_hint: str = ""
 
     @abstractmethod
     def build(self) -> CompiledStateGraph:
@@ -45,6 +47,11 @@ class BaseAgent(ABC):
     def route_key(self) -> str:
         """路由键（= agent_type），供映射表路由使用。"""
         return self.agent_type
+
+    @property
+    def effective_routing_hint(self) -> str:
+        """路由提示：显式配置优先，缺省回退 description（注册表候选清单用）。"""
+        return self.routing_hint or self.description
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<{self.__class__.__name__} type={self.agent_type} name={self.name}>"

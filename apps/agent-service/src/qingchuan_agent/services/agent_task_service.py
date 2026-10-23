@@ -64,7 +64,7 @@ class AgentTaskService:
         """提交一个 Agent 任务并同步执行（骨架阶段同步执行）。
 
         Args:
-            task_type: 任务类型（AgentType.mark，如 "agent_a"）；可为 None，
+            task_type: 任务类型（AgentType.mark，如 "customer_service"）；可为 None，
                 此时由顶层 RouteResolver 按 payload 自然语言动态路由（hybrid）。
             payload: 任务入参（由各 Agent 自定义结构，按最终路由到的 Agent 选用对应字段）
             timeout_at: 超时时间点（缺省按配置 agent.task_timeout_seconds）

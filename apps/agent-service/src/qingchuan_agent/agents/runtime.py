@@ -108,7 +108,7 @@ class AgentRuntime:
         """提交并执行一个 Agent 任务（同步执行入口）。
 
         Args:
-            task_type: 任务类型（如 "agent_a"）
+            task_type: 任务类型（如 "customer_service"）
             payload: 任务入参
             thread_id: LangGraph 线程 ID（断点续跑定位；缺省自动生成）
             task_id: 落库任务 ID（回写审计）

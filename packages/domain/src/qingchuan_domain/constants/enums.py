@@ -36,9 +36,17 @@ class Environment(StrBaseEnum):
 
 
 class AgentType(StrBaseEnum):
-    """Agent 类型（注册表路由键）"""
+    """Agent 类型（业务 Agent 五大分类，mark 同时作为 agent_tasks.task_type 入库值）。
 
-    AGENT_A = "agent_a", "RAG 问答 Agent"
+    由早期单一 AGENT_A（RAG 问答）演进为五分类；原问答 Agent 更名为
+    CUSTOMER_SERVICE（customer_service），task_type 同步使用新 mark。
+    """
+
+    CONTENT = "content", "内容创作 Agent"
+    CUSTOMER_SERVICE = "customer_service", "问答（客服）Agent"
+    SECURITY = "security", "安全 Agent"
+    DATA_ANALYSIS = "data_analysis", "数据分析 Agent"
+    DATA_MONITOR = "data_monitor", "数据监控 Agent"
 
 
 class ToolPermissionLevel(StrBaseEnum):
