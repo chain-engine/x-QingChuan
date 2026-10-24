@@ -85,6 +85,12 @@ vector_store:
   type: milvus
   # milvus 后端
   milvus_uri: ./data/milvus.db   # 本地 milvus-lite 文件；生产为远程地址 http://host:19530
+  # 远程 Milvus 鉴权（本地 milvus-lite 无需配置，留空即可）
+  #   token：Milvus RBAC / JWT token（Zilliz Cloud 等托管服务使用）
+  #   username / password：Milvus 用户名密码认证
+  milvus_token: ""
+  milvus_username: ""
+  milvus_password: ""
   collection_name: documents
   distance: cosine
   dimension: 1024                # 与 embedding 模型（bge-m3）输出维度一致

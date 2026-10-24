@@ -25,6 +25,9 @@ class VectorRepository(BaseRepository):
         store_type: str = "chroma",
         milvus_uri: str = "./data/milvus.db",
         dimension: int | None = None,
+        milvus_token: str | None = None,
+        milvus_username: str | None = None,
+        milvus_password: str | None = None,
     ):
         if store_type == "milvus":
             self._store = MilvusVectorStore(
@@ -32,6 +35,9 @@ class VectorRepository(BaseRepository):
                 collection_name=collection_name,
                 metric_type=distance_type,
                 dimension=dimension,
+                token=milvus_token,
+                username=milvus_username,
+                password=milvus_password,
             )
         else:
             self._store = ChromaVectorStore(

@@ -360,7 +360,12 @@ class MilvusVectorStore(VectorStoreBase):
 
     通过配置 uri 切换：
         - 本地文件模式（开发默认）：uri="./data/milvus.db"（依赖 milvus-lite）
-        - 远程服务模式（生产）：uri="http://milvus:19530"（依赖 pymilvus，可选 token）
+        - 远程服务模式（生产）：uri="http://milvus:19530"（依赖 pymilvus）
+
+    远程鉴权（生产常见）：
+        - token：Milvus RBAC / JWT token（Zilliz Cloud 使用 token 认证）
+        - username + password：Milvus 用户名密码认证（映射到 MilvusClient 的 user/password）
+        本地 milvus-lite 模式无需鉴权，保持默认 None 即可。
 
     与 Chroma 输出结构对齐：search 返回 {id, text, metadata, distance}，
     其中 distance 统一为"距离语义"（小=相似，与 Chroma 一致）：
@@ -380,12 +385,18 @@ class MilvusVectorStore(VectorStoreBase):
         collection_name: str = "documents",
         metric_type: str = "cosine",
         dimension: int | None = None,
+        token: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
         # 本地文件相对路径锚定到服务根目录；远程地址（http://...）原样保留
         self._uri = resolve_service_path(uri)
         self.collection_name = collection_name
         self._metric_type = self.METRIC_MAP.get(metric_type.lower(), "COSINE")
         self._dimension = dimension
+        self._token = token or None
+        self._username = username or None
+        self._password = password or None
         self._client: MilvusClient | None = None
         self._initialized = False
 
@@ -394,13 +405,22 @@ class MilvusVectorStore(VectorStoreBase):
         if self._initialized:
             return
         try:
-            self._client = MilvusClient(uri=self._uri)
+            client_kwargs: dict[str, Any] = {"uri": self._uri}
+            # 鉴权参数仅在显式配置时传入（MilvusClient 的 user/password/token 均默认空串）
+            if self._token:
+                client_kwargs["token"] = self._token
+            if self._username:
+                client_kwargs["user"] = self._username
+            if self._password:
+                client_kwargs["password"] = self._password
+            self._client = MilvusClient(**client_kwargs)
             if self._dimension and not self._client.has_collection(self.collection_name):
                 self._create_collection(self._dimension)
             self._initialized = True
             logger.info(
                 f"MilvusVectorStore initialized: uri={self._uri}, "
-                f"collection={self.collection_name}, metric={self._metric_type}"
+                f"collection={self.collection_name}, metric={self._metric_type}, "
+                f"auth={'enabled' if (self._token or self._username) else 'none'}"
             )
         except Exception as e:
             logger.error(f"Failed to initialize MilvusVectorStore: {e}")
@@ -471,13 +491,15 @@ class MilvusVectorStore(VectorStoreBase):
                 data=[query_embedding],
                 limit=top_k,
                 filter=filter_expr or "",
-                output_fields=["text"],
+                # 返回全部字段：动态元数据（document_id 等）随结果带回，与 Chroma search 输出对齐
+                output_fields=["*"],
                 search_params={"metric_type": self._metric_type},
             )
             formatted: list[dict[str, Any]] = []
             for hit in results[0] if results else []:
                 entity = hit.get("entity") or {}
-                metadata = {k: v for k, v in entity.items() if k != "text"}
+                # 排除系统字段 id / text / vector，其余为动态元数据字段
+                metadata = {k: v for k, v in entity.items() if k not in ("id", "text", "vector")}
                 distance = hit.get("distance", 0.0)
                 if self._metric_type == "COSINE":
                     # Milvus COSINE 返回相似度（1.0=最相似）→ 转距离语义（0.0=最相似），与 Chroma 一致
@@ -608,7 +630,10 @@ class MilvusVectorStore(VectorStoreBase):
             return ""
         clauses = []
         for key, value in where.items():
-            if isinstance(value, str):
+            # bool 须先于 int 判断（Python 中 bool 是 int 子类）；Milvus 布尔字面量为小写 true/false
+            if isinstance(value, bool):
+                clauses.append(f"{key} == {'true' if value else 'false'}")
+            elif isinstance(value, str):
                 # 转义内部引号，防 filter 注入
                 escaped = value.replace("\\", "\\\\").replace('"', '\\"')
                 clauses.append(f'{key} == "{escaped}"')

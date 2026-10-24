@@ -6,6 +6,8 @@ Retrieval Pipeline Module
 
 from __future__ import annotations
 
+import time as _time
+from datetime import UTC, datetime
 from typing import Any
 
 from qingchuan_rag.constants import (
@@ -13,6 +15,8 @@ from qingchuan_rag.constants import (
 )
 from qingchuan_rag.core.exceptions import RetrievalError
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.observability import emit
+from qingchuan_rag.core.observability.events import FailureEvent, RetrievalPhaseEvent
 from qingchuan_rag.infras.embedding import EmbeddingModelBase
 from qingchuan_rag.infras.llm import BaseLLMProvider
 from qingchuan_rag.retrieval.candidate.base import BaseRetrievalProvider
@@ -23,6 +27,10 @@ from qingchuan_rag.retrieval.understanding.base import (
 )
 from qingchuan_rag.utils.filters import MetadataFilterEngine
 from qingchuan_rag.utils.similarity import DistanceType, SimilaritySearchEngine
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class RetrievalPipeline:
@@ -194,24 +202,60 @@ class RetrievalPipeline:
         effective_threshold = similarity_threshold or self._default_threshold
         context = context or {}
 
+        started_at = _utcnow()
+        t_total = _time.perf_counter()
+
         try:
             # ── Stage 1: 查询理解 ──────────────────────────
+            t_stage = _time.perf_counter()
             understanding_result = self._stage1_understand(query, context)
+            stage1_ms = (_time.perf_counter() - t_stage) * 1000
+            emit(
+                RetrievalPhaseEvent(
+                    stage="understand",
+                    latency_ms=stage1_ms,
+                    started_at=started_at,
+                    ended_at=_utcnow(),
+                )
+            )
             processed_query = understanding_result.processed_query
 
             # ── Stage 2: 候选召回 ──────────────────────────
+            t_stage = _time.perf_counter()
             candidates, ranked_lists = self._stage2_candidate_retrieval(
                 query=processed_query,
                 sub_queries=understanding_result.sub_queries,
                 top_k=effective_top_k,
                 metadata_filter=metadata_filter,
             )
+            stage2_ms = (_time.perf_counter() - t_stage) * 1000
+            emit(
+                RetrievalPhaseEvent(
+                    stage="candidate",
+                    latency_ms=stage2_ms,
+                    candidates=len(candidates),
+                    started_at=started_at,
+                    ended_at=_utcnow(),
+                )
+            )
 
             if not candidates:
                 logger.debug("RetrievalPipeline: no candidates found")
+                emit(
+                    RetrievalPhaseEvent(
+                        stage="total",
+                        latency_ms=(_time.perf_counter() - t_total) * 1000,
+                        candidates=0,
+                        retrieved=0,
+                        empty_reason="no_candidate",
+                        started_at=started_at,
+                        ended_at=_utcnow(),
+                    )
+                )
                 return []
 
             # ── Stage 3: 排序筛选 ──────────────────────────
+            t_stage = _time.perf_counter()
             results = self._stage3_rank_and_filter(
                 query=processed_query,
                 candidates=candidates,
@@ -221,15 +265,44 @@ class RetrievalPipeline:
                 use_mmr=use_mmr,
                 mmr_lambda=mmr_lambda,
             )
+            stage3_ms = (_time.perf_counter() - t_stage) * 1000
+            emit(
+                RetrievalPhaseEvent(
+                    stage="rank_filter",
+                    latency_ms=stage3_ms,
+                    candidates=len(candidates),
+                    retrieved=len(results),
+                    started_at=started_at,
+                    ended_at=_utcnow(),
+                )
+            )
 
             logger.debug(
                 f"RetrievalPipeline: retrieved {len(results)} results "
                 f"from {len(candidates)} candidates"
             )
+            emit(
+                RetrievalPhaseEvent(
+                    stage="total",
+                    latency_ms=(_time.perf_counter() - t_total) * 1000,
+                    candidates=len(candidates),
+                    retrieved=len(results),
+                    empty_reason="filtered_out" if not results else None,
+                    started_at=started_at,
+                    ended_at=_utcnow(),
+                )
+            )
             return results
 
         except Exception as e:
             logger.error(f"RetrievalPipeline failed: {e}")
+            emit(
+                FailureEvent(
+                    phase="retrieval",
+                    error_type=type(e).__name__,
+                    message=str(e),
+                )
+            )
             raise RetrievalError(f"Retrieval failed: {e}") from e
 
     def get_stats(self) -> dict[str, Any]:
