@@ -6,6 +6,7 @@ name: x-qingchuan
 # 单机共存端口规划（汉江已占用：80 nginx / 3307 mysql / 6380 redis）：
 #   - mysql  13306:3306   运维口（服务间走内部网络，如无需外部直连可去掉 ports）
 #   - redis  16379:6379   运维口（同上）
+#   - milvus 19530/9091   内部网络（etcd + minio + milvus standalone，不对外暴露，需外部直连自行加 ports）
 #   - rag    8010:8010    对外服务口（阿里云安全组需放行）
 #   - agent  8020:8020    对外服务口（阿里云安全组需放行）
 #
@@ -95,6 +96,109 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Milvus 向量库（standalone：etcd 元数据 + minio 对象存储 + milvus 三组件，仅内部网络）
+  # 对齐本地调试 Milvus（D:\04Docker\Milvus）同款镜像与拓扑：etcd v3.5.5 / minio / milvus v2.4.0
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: x-QingChuan-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - etcd-data:/etcd
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: x-QingChuan-minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    command: minio server /minio_data --console-address ":9001"
+    volumes:
+      - minio-data:/minio_data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: x-QingChuan-milvus
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus-data:/var/lib/milvus
+    networks:
+      - backend
+    depends_on:
+      - etcd
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   rag-service:
     build:
       context: .
@@ -107,9 +211,12 @@ services:
       MIMO_API_KEY: ${MIMO_API_KEY:-}
       MIMO_API_BASE: ${MIMO_API_BASE:-https://api.xiaomimimo.com/v1}
       MIMO_MODEL_NAME: ${MIMO_MODEL_NAME:-mimo-v2.6-pro}
-      # 向量存储（milvus-lite 本地文件模式，数据落 rag-data 卷；生产可改远程 Milvus 地址 + 鉴权）
-      VECTOR_STORE_TYPE: ${VECTOR_STORE_TYPE:-milvus}
-      VECTOR_STORE_MILVUS_URI: /app/data/milvus.db
+      # 向量存储：compose 内置 Milvus（standalone：etcd + minio + milvus），
+      # rag 经内部网络访问 http://milvus:19530；URI 固定写死不走 .env 变量替换，
+      # 避免与本地调试 .env 的 VECTOR_STORE_MILVUS_URI=http://localhost:19530 冲突；
+      # 如需切换外部 Milvus 服务，改此处为对应地址 + 鉴权参数
+      VECTOR_STORE_TYPE: milvus
+      VECTOR_STORE_MILVUS_URI: http://milvus:19530
       VECTOR_STORE_MILVUS_TOKEN: ${VECTOR_STORE_MILVUS_TOKEN:-}
       VECTOR_STORE_MILVUS_USERNAME: ${VECTOR_STORE_MILVUS_USERNAME:-}
       VECTOR_STORE_MILVUS_PASSWORD: ${VECTOR_STORE_MILVUS_PASSWORD:-}
@@ -132,6 +239,8 @@ services:
       - backend
     depends_on:
       mysql:
+        condition: service_healthy
+      milvus:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request, socket; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8010/api/v1/health')"]
@@ -226,6 +335,9 @@ services:
 volumes:
   mysql-data:
   redis-data:
+  etcd-data:
+  minio-data:
+  milvus-data:
   rag-data:
   agent-logs:
   rag-logs:

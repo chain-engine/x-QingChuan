@@ -9,8 +9,8 @@ Make HRSS domain knowledge retrievable and answerable — ships an offline index
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688?logo=fastapi&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-2.3%2B-24292F)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4%2B-F97316)
-![sentence-transformers](https://img.shields.io/badge/sentence--transformers-2.2%2B-FF6F61)
-![rank-bm25](https://img.shields.io/badge/rank--bm25-0.2%2B-2C3E50)
+![sentence-transformers](https://img.shields.io/badge/sentence--transformers-5.7%2B-FF6F61)
+![BM25](https://img.shields.io/badge/BM25-Incremental%20Index-2C3E50)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![APScheduler](https://img.shields.io/badge/APScheduler-3.10%2B-2C3E50)
@@ -32,7 +32,7 @@ The HRSS data offline indexing + RAG integrated service platform of the QingChua
 - **Multi-model generation**: OpenAI-compatible protocol, supporting DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo;
 - **Audit & rate limiting**: all write operations are written to audit logs (operator fixed as `internal`), built-in slowapi rate limiting.
 
-**Current status**: the RAG retrieval pipeline runs end-to-end; HRSS sync supports mock integration (`HRSS_MOCK=true` by default).
+**Current status**: the RAG retrieval pipeline runs end-to-end; BM25 uses a self-built incremental inverted index (add/remove in O(terms), no full rebuild); text chunking supports recursive / character / token / semantic (self-built SemanticSplitter) strategies; HRSS sync supports mock integration (`HRSS_MOCK=true` by default).
 
 ## 🚀 Quick Start
 
@@ -81,12 +81,12 @@ Key parameters:
 | `HRSS_MOCK` / `HRSS_MOCK_COUNT` | `true` / `5` | Mock mode: uses local sample data for end-to-end integration without a real API |
 | `EMBEDDING_MODEL` | `BAAI/bge-m3` | embedding model (local offline inference) |
 | `VECTOR_STORE_TYPE` / `VECTOR_STORE_PERSIST_DIR` | `chroma` / `./data/chroma` | vector store type (chroma / milvus) and persistence directory |
-| `TEXT_SPLITTER_PROVIDER` / `TEXT_SPLITTER_STRATEGY` | `langchain` / `recursive` | chunking implementation & strategy (chunk_size 512 / overlap 50) |
+| `TEXT_SPLITTER_PROVIDER` / `TEXT_SPLITTER_STRATEGY` | `langchain` / `recursive` | Chunking implementation (langchain / llamaindex) & strategy (recursive / character / token / semantic; chunk_size 512 / overlap 50) |
 | `RETRIEVAL_TOP_K` / `RETRIEVAL_SIMILARITY_THRESHOLD` | `5` / `0.7` | retrieval count / similarity threshold (`RETRIEVAL_USE_MMR` enables MMR) |
 | `GENERATION_PROVIDER` / `GENERATION_MODEL` | `mimo` / `mimo-v2.6-pro` | generation model; supports DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
 | `DEEPSEEK_API_KEY` / `DOUBAO_API_KEY` / `ALIYUN_API_KEY` / `MIMO_API_KEY` | empty | LLM provider API keys (required in production) |
 | `RATE_LIMIT_ENABLED` | `false` | slowapi rate limiting toggle (per-minute / per-hour quotas) |
-| `CORS_ENABLED` / `CORS_ALLOW_ORIGINS` | `true` / `localhost:3000,8080` | CORS toggle and allowed origins |
+| `CORS_ENABLED` / `CORS_ALLOW_ORIGINS` / `CORS_ALLOW_CREDENTIALS` | `true` / `localhost:3000,8080` / `true` | CORS toggle, allowed origins & credentials; credentials are disabled automatically when origins contain `*`; `*` is forbidden in production |
 
 ### 🚀 5. Start the Services
 
@@ -100,7 +100,7 @@ uv run qingchuan-rag-api --port 8010    # override the listen port
 uv run uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
-**Docker container deployment** (run from the repository root):
+**Docker container deployment** (run from the repository root; compose ships a built-in Milvus vector store — etcd + MinIO + Milvus standalone — and rag-service automatically connects to the internal `http://milvus:19530`):
 
 ```bash
 docker compose up --build rag-service
@@ -282,9 +282,9 @@ flowchart LR
 | Web framework | FastAPI + Uvicorn | HTTP gateway, unified response wrapper & exception handling |
 | MCP | mcp 2.3+ | Streamable HTTP (/mcp), read-only retrieval tools |
 | Vector retrieval | ChromaDB + sentence-transformers (BAAI/bge-m3) | Dense index; `VECTOR_STORE_TYPE` supports Milvus |
-| Sparse retrieval | rank-bm25 | BM25 keyword index, hybrid with vector retrieval |
+| Sparse retrieval | BM25IndexStore (self-built incremental inverted index) | Inverted index + Okapi BM25 scoring, incrementally maintained in O(terms), hybrid with vector retrieval; rank-bm25 kept only for consistency comparison & fallback path |
 | Hybrid retrieval | candidate + ranking + understanding | Multi-path recall (vector / BM25 / keyword) + rerank (MMR / RRF / score filter) + query understanding (intent / entity / expansion / rewrite) |
-| Text chunking | langchain-text-splitters | recursive / character / token / semantic strategies |
+| Text chunking | langchain-text-splitters + self-built SemanticSplitter + llama-index-core | recursive / character / token / semantic (BGE-M3 semantic breakpoints) / llamaindex strategies |
 | Business DB | SQLAlchemy 2 + PyMySQL (MySQL 8) | Audit logs / sync task status |
 | Scheduling | APScheduler | HRSS sync cron (default 03:00 daily) |
 | LLM access | langchain-openai (OpenAI-compatible) | DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
@@ -302,8 +302,8 @@ flowchart LR
 | MCP | mcp 2.3+ (Streamable HTTP) |
 | Vector database | ChromaDB 0.4+ (Milvus 2.4 / milvus-lite optional) |
 | Embedding | sentence-transformers 2.2+ (BAAI/bge-m3, local offline inference) |
-| Sparse retrieval | rank-bm25 0.2+ |
-| Text chunking | langchain-text-splitters 1.1+ |
+| Sparse retrieval | Self-built BM25 incremental inverted index (rank-bm25 0.2+ fallback / comparison) |
+| Text chunking | langchain-text-splitters 1.1+ / llama-index-core 0.14+ / self-built SemanticSplitter |
 | LLM access | langchain-core 0.3+ / langchain-openai 0.2+ / openai 1.0+ (OpenAI-compatible protocol) |
 | Business database | MySQL 8.0 (SQLAlchemy 2 + PyMySQL; SQLite for local) |
 | Scheduling | APScheduler 3.10+ |
@@ -366,7 +366,7 @@ The service enables **Swagger interactive docs / ReDoc read-only docs / OpenAPI 
 | --- | --- | --- | --- |
 | MySQL 8.0 | Audit logs / sync task status | `DATABASE_URL` | Required in production; SQLite works locally (`sqlite:///./data/qingchuan.db`); database must be created in advance (`utf8mb4`) |
 | Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | Persisted at `data/chroma`; Milvus optional (`VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`) |
-| BM25 index | Sparse retrieval index (keyword matching) | `./data/bm25/documents.json` | Built automatically with document indexing |
+| BM25 index | Sparse retrieval index (incremental inverted, keyword matching) | `./data/bm25/default.json` (index_name defaults to `default`) | Incrementally maintained in O(terms); snapshot persistence (default flush every 50 mutations + on shutdown) |
 | Document storage | Uploaded source documents | `./data/documents` | DocumentRepository storage path |
 | Log files | loguru file rotation | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days |
 

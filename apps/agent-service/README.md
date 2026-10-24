@@ -76,6 +76,7 @@ uv sync --package qingchuan-agent  # 仅安装 agent-service 及其工作区依�
 | `QINGCHUAN_AGENT_AI_LLM_API_KEY` / `BASE_URL` / `MODEL` | 空 / 空 / `deepseek-chat` | LLM 供应商配置（未配 Key 走 Mock） |
 | `QINGCHUAN_AGENT_RAG_MCP_URL` | `http://rag-service:8010/mcp` | rag-service MCP 端点（本地用 `http://127.0.0.1:8010/mcp`） |
 | `QINGCHUAN_AGENT_RAG_HTTP_BASE_URL` | `http://rag-service:8010` | rag HTTP 兜底地址（预留） |
+| `QINGCHUAN_AGENT_CORS_ENABLED` / `QINGCHUAN_AGENT_CORS_ORIGINS` / `QINGCHUAN_AGENT_CORS_ALLOW_CREDENTIALS` | `true` / `*` / `true` | 跨域开关、允许来源与凭证；生产环境禁止 `*`（与 rag-service 行为一致） |
 | `QINGCHUAN_AGENT_LOGGING_LEVEL` | `INFO` | 日志级别（`LOGGING_FILE_PATH` 控制文件路径 / 轮转） |
 
 > 生产环境（`APP_ENV=production`）强制校验：禁止 DEBUG、CORS 白名单不能为 `*`、启用数据库时必须配置 HOST/DATABASE、checkpoint 必须为 redis，否则直接阻断启动。

@@ -9,8 +9,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688?logo=fastapi&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-2.3%2B-24292F)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4%2B-F97316)
-![sentence-transformers](https://img.shields.io/badge/sentence--transformers-2.2%2B-FF6F61)
-![rank-bm25](https://img.shields.io/badge/rank--bm25-0.2%2B-2C3E50)
+![sentence-transformers](https://img.shields.io/badge/sentence--transformers-5.7%2B-FF6F61)
+![BM25](https://img.shields.io/badge/BM25-Incremental%20Index-2C3E50)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![APScheduler](https://img.shields.io/badge/APScheduler-3.10%2B-2C3E50)
@@ -32,7 +32,7 @@
 - **多模型生成**：OpenAI 兼容协议，支持 DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo；
 - **审计与限流**：所有写操作写入审计日志（操作人固定 `internal`），内置 slowapi 限流。
 
-**当前状态**：RAG 检索流水线已端到端跑通；人社同步支持 mock 数据联调（`HRSS_MOCK=true` 默认开启）。
+**当前状态**：RAG 检索流水线已端到端跑通；BM25 采用自研增量倒排索引（增删 O(词数)，不再全量重建）；文本切分支持 recursive / character / token / semantic（自研 SemanticSplitter）等策略；人社同步支持 mock 数据联调（`HRSS_MOCK=true` 默认开启）。
 
 ## 🚀 快速开始
 
@@ -81,12 +81,12 @@ cp config.yaml.example config.yaml
 | `HRSS_MOCK` / `HRSS_MOCK_COUNT` | `true` / `5` | mock 模式：无真实 API 时使用本地示例数据端到端联调 |
 | `EMBEDDING_MODEL` | `BAAI/bge-m3` | 向量嵌入模型（本地离线推理） |
 | `VECTOR_STORE_TYPE` / `VECTOR_STORE_PERSIST_DIR` | `chroma` / `./data/chroma` | 向量库类型（chroma / milvus）与持久化目录 |
-| `TEXT_SPLITTER_PROVIDER` / `TEXT_SPLITTER_STRATEGY` | `langchain` / `recursive` | 文本切分实现与策略（chunk_size 512 / overlap 50） |
+| `TEXT_SPLITTER_PROVIDER` / `TEXT_SPLITTER_STRATEGY` | `langchain` / `recursive` | 文本切分实现（langchain / llamaindex）与策略（recursive / character / token / semantic；chunk_size 512 / overlap 50） |
 | `RETRIEVAL_TOP_K` / `RETRIEVAL_SIMILARITY_THRESHOLD` | `5` / `0.7` | 检索数量 / 相似度阈值（`RETRIEVAL_USE_MMR` 控制 MMR） |
 | `GENERATION_PROVIDER` / `GENERATION_MODEL` | `mimo` / `mimo-v2.6-pro` | 生成模型；支持 DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo |
 | `DEEPSEEK_API_KEY` / `DOUBAO_API_KEY` / `ALIYUN_API_KEY` / `MIMO_API_KEY` | 空 | 各 LLM 供应商 API Key（生产必填） |
 | `RATE_LIMIT_ENABLED` | `false` | slowapi 限流开关（每分钟 / 每小时配额） |
-| `CORS_ENABLED` / `CORS_ALLOW_ORIGINS` | `true` / `localhost:3000,8080` | 跨域开关与允许来源 |
+| `CORS_ENABLED` / `CORS_ALLOW_ORIGINS` / `CORS_ALLOW_CREDENTIALS` | `true` / `localhost:3000,8080` / `true` | 跨域开关、允许来源与凭证；允许来源含 `*` 时自动关闭凭证；生产环境禁止 `*` |
 
 ### 🚀 5. 服务启动
 
@@ -100,7 +100,7 @@ uv run qingchuan-rag-api --port 8010    # 覆盖监听端口
 uv run uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
-**Docker 容器部署**（仓库根目录执行）：
+**Docker 容器部署**（仓库根目录执行；compose 内置 Milvus 向量库，etcd + MinIO + Milvus standalone 三组件，rag-service 自动连接内部 `http://milvus:19530`）：
 
 ```bash
 docker compose up --build rag-service
@@ -282,9 +282,9 @@ flowchart LR
 | Web 框架 | FastAPI + Uvicorn | HTTP 网关，统一响应包装与异常处理 |
 | MCP | mcp 2.3+ | Streamable HTTP（/mcp），只读检索工具 |
 | 向量检索 | ChromaDB + sentence-transformers（BAAI/bge-m3） | 稠密索引；`VECTOR_STORE_TYPE` 可选 Milvus |
-| 稀疏检索 | rank-bm25 | BM25 关键词索引，与向量检索混合 |
+| 稀疏检索 | BM25IndexStore（自研增量倒排） | 倒排表 + Okapi BM25 打分，增删 O(词数) 增量维护，与向量检索混合；rank-bm25 仅一致性对比与备用路径 |
 | 混合检索 | candidate + ranking + understanding | 多路召回（向量 / BM25 / 关键词）+ 重排（MMR / RRF / 分数过滤）+ 查询理解（意图 / 实体 / 扩写 / 改写） |
-| 文本切分 | langchain-text-splitters | recursive / character / token / semantic 策略 |
+| 文本切分 | langchain-text-splitters + 自研 SemanticSplitter + llama-index-core | recursive / character / token / semantic（BGE-M3 语义断点）/ llamaindex 策略 |
 | 业务库 | SQLAlchemy 2 + PyMySQL（MySQL 8） | 审计日志 / 同步任务状态 |
 | 周期调度 | APScheduler | 人社同步 cron（默认每日 03:00） |
 | LLM 接入 | langchain-openai（OpenAI 兼容） | DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo |
@@ -302,8 +302,8 @@ flowchart LR
 | MCP | mcp 2.3+（Streamable HTTP） |
 | 向量数据库 | ChromaDB 0.4+（可选 Milvus 2.4 / milvus-lite） |
 | 向量嵌入 | sentence-transformers 2.2+（BAAI/bge-m3，本地离线推理） |
-| 稀疏检索 | rank-bm25 0.2+ |
-| 文本切分 | langchain-text-splitters 1.1+ |
+| 稀疏检索 | 自研 BM25 增量倒排（rank-bm25 0.2+ 备用 / 对比） |
+| 文本切分 | langchain-text-splitters 1.1+ / llama-index-core 0.14+ / 自研 SemanticSplitter |
 | LLM 接入 | langchain-core 0.3+ / langchain-openai 0.2+ / openai 1.0+（OpenAI 兼容协议） |
 | 业务数据库 | MySQL 8.0（SQLAlchemy 2 + PyMySQL；本地可 SQLite） |
 | 周期调度 | APScheduler 3.10+ |
@@ -366,7 +366,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | MySQL 8.0 | 审计日志 / 同步任务状态 | `DATABASE_URL` | 生产必需；本地可 SQLite（`sqlite:///./data/qingchuan.db`）；数据库需提前创建（`utf8mb4`） |
 | Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | 持久化于 `data/chroma`；可选 Milvus（`VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`） |
-| BM25 索引 | 稀疏检索索引（关键词匹配） | `./data/bm25/documents.json` | 随文档索引自动构建 |
+| BM25 索引 | 稀疏检索索引（增量倒排，关键词匹配） | `./data/bm25/default.json`（index_name 默认 `default`） | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘） |
 | 文档存储 | 上传的源文档 | `./data/documents` | DocumentRepository 存储路径 |
 | 日志文件 | loguru 文件轮转 | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | 按天轮转 / 保留 7 天 |
 

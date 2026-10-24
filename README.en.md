@@ -9,6 +9,7 @@ Make government-domain knowledge searchable, answerable and orchestratable — b
 ![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-1C3C3C?logo=langchain&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-2.3%2B-24292F)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4%2B-F97316)
+![BM25](https://img.shields.io/badge/BM25-Incremental%20Index-2C3E50)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![APScheduler](https://img.shields.io/badge/APScheduler-3.10%2B-2C3E50)
@@ -31,7 +32,7 @@ QingChuan is a **data offline indexing + RAG retrieval-augmented generation + hu
 - **packages/domain（qingchuan-domain）**: single source of truth for entities / schemas / retrieval protocols / ports, referenced directly by both services;
 - **packages/common（qingchuan-common）**: cross-service shared components (MCP client wrapper / auth / audit / observability, placeholder).
 
-**Current status**: Phase 1 focuses on intelligent Q&A — the RAG retrieval & Q&A chain runs end-to-end (HRSS sync supports mock integration and the Agent A Q&A chain is closed loop); the Agent orchestration skeleton is delivered (new business agents extend via registration), and task/event persistence is disabled by default so the service can start without a database.
+**Current status**: Phase 1 focuses on intelligent Q&A — the RAG retrieval & Q&A chain runs end-to-end (HRSS sync supports mock integration and the Agent A Q&A chain is closed loop); BM25 uses a self-built incremental inverted index and text chunking supports recursive / semantic strategies; the Agent orchestration skeleton is delivered (new business agents extend via registration), and task/event persistence is disabled by default so the service can start without a database.
 
 ## 🚀 Quick Start
 
@@ -53,7 +54,7 @@ uv run qingchuan-agent-api
 
 Access <http://127.0.0.1:8020>. See [agent-service/README.en.md](apps/agent-service/README.en.md).
 
-> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, rag-service and agent-service (internal network only). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
+> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, Milvus (etcd + MinIO + Milvus standalone), rag-service and agent-service (internal network only). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
 
 ## 📁 Project Structure
 
@@ -102,7 +103,7 @@ x-QingChuan/
 │   │   └── src/qingchuan_common/
 │   └── domain/                         # Shared domain package (entities / schemas / retrieval protocols / ports, single source of truth)
 │       └── src/qingchuan_domain/
-├── docker-compose.yml                  # One-command orchestration of rag-service + agent-service
+├── docker-compose.yml                  # One-command orchestration of mysql + redis + milvus (etcd+minio+standalone) + rag-service + agent-service
 ├── pyproject.toml                      # uv workspace root (members: apps/*, packages/*)
 ├── .env                                # Environment config (not committed)
 ├── .pre-commit-config.yaml             # pre-commit hooks (ruff)
@@ -207,7 +208,7 @@ flowchart LR
 | LLM access | LangChain (OpenAI-compatible) | DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
 | MCP | mcp 2.3+ | rag-service Streamable HTTP (/mcp); agent calls via MCP client |
 | Vector retrieval | ChromaDB + sentence-transformers (BAAI/bge-m3) | Dense index, persisted at `data/chroma` |
-| Sparse retrieval | rank-bm25 | BM25 index, hybrid with vector retrieval |
+| Sparse retrieval | BM25IndexStore (self-built incremental inverted index) | Inverted index + Okapi BM25 scoring, incrementally maintained in O(terms), hybrid with vector retrieval; rank-bm25 kept only for consistency comparison & fallback path |
 | Business DB | SQLAlchemy 2 + PyMySQL (MySQL 8) | Audit logs / sync tasks / Agent tasks & events |
 | Scheduling | APScheduler | HRSS sync cron (default 03:00 daily) |
 | Config | pydantic-settings / pydantic + PyYAML | Segmented prefixed config; invalid config blocks startup |
@@ -225,8 +226,9 @@ flowchart LR
 | LLM access | LangChain (langchain-core 0.3+ / langchain-openai 0.2+, OpenAI-compatible protocol) |
 | MCP | mcp 2.3+ (Streamable HTTP) |
 | Vector database | ChromaDB 0.4+ |
-| Embedding | sentence-transformers (BAAI/bge-m3) |
-| Sparse retrieval | rank-bm25 0.2+ |
+| Embedding | sentence-transformers 5.7+ (BAAI/bge-m3) |
+| Sparse retrieval | Self-built BM25 incremental inverted index (rank-bm25 0.2+ fallback / comparison) |
+| Text chunking | langchain-text-splitters 1.1+ / llama-index-core 0.14+ / self-built SemanticSplitter |
 | Business database | MySQL 8.0 (SQLAlchemy 2 + PyMySQL; SQLite for local) |
 | Scheduling | APScheduler 3.10+ |
 | Config management | pydantic-settings 2.5+ / pydantic 2.9+ / PyYAML |
@@ -235,9 +237,82 @@ flowchart LR
 | Engineering | ruff + pre-commit + pytest (pytest-asyncio / pytest-cov) |
 | Deployment | Docker / Docker Compose |
 
+## 📡 API Documentation
+
+Both services enable **Swagger interactive docs / ReDoc read-only docs / OpenAPI JSON**:
+
+| Service | Swagger | ReDoc | OpenAPI JSON |
+| --- | --- | --- | --- |
+| rag-service (:8010) | <http://127.0.0.1:8010/docs> | <http://127.0.0.1:8010/redoc> | <http://127.0.0.1:8010/openapi.json> |
+| agent-service (:8020) | <http://127.0.0.1:8020/docs> | <http://127.0.0.1:8020/redoc> | <http://127.0.0.1:8020/openapi.json> |
+
+### 📋 Core API List
+
+**rag-service (/api/v1)**:
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/v1/health` / `/api/v1/version` / `/api/v1/status` | Health check / version / runtime status |
+| POST | `/api/v1/rag/query` | RAG Q&A (retrieve + generate; supports top_k / threshold / MMR / metadata filter / provider override) |
+| POST | `/api/v1/rag/retrieve` / `/api/v1/rag/embed` | Retrieval only / embed text |
+| POST | `/api/v1/documents/upload` | Upload a document and index it automatically (UTF-8 / GBK supported) |
+| GET | `/api/v1/documents` | Document list (paginated, filter by status / type) |
+| GET / DELETE | `/api/v1/documents/{document_id}` | Document detail / delete a document and its vectors |
+| POST | `/api/v1/sync/trigger` | Trigger an HRSS sync (`full=true` full, `force=true` forced rerun) |
+| GET | `/api/v1/sync/status` | Latest sync status |
+| GET | `/api/v1/audit/logs` | Audit log list (paginated by entity / action / operator / time range / keyword) |
+
+MCP endpoint: `/mcp` (Streamable HTTP), tools `retrieve_docs` / `rag_query` (read-only).
+
+**agent-service (/api/v1)**:
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/v1/health` / `/api/v1/version` | Health check (incl. DB / Agent runtime) / version info |
+| GET | `/api/v1/agents/specs` | Registered Agent spec list |
+| POST | `/api/v1/tasks` | Submit an Agent task (explicit task_type routes directly; empty → LLM dynamic routing) |
+| GET | `/api/v1/tasks` | Task list (paginated, filter by status / type) |
+| GET | `/api/v1/tasks/{task_id}` | Task detail |
+| POST | `/api/v1/tasks/{task_id}/resume` | Human takeover: resume an interrupted task |
+| GET | `/api/v1/events` / `/api/v1/events/{event_id}` | Collaboration event list / detail |
+
+### 🔐 Permission & Access Control
+
+- Internal services without app-level auth: all rag-service write operations (document upload / delete, sync trigger) are written to audit logs via AuditService (operator fixed as `internal`); agent-service read-only tools (MCP retrieval) are callable directly while write operations are performed by humans, and it holds no index-write permission on rag-service;
+- rag-service has built-in slowapi rate limiting (`RATE_LIMIT_ENABLED`); both services forbid DEBUG and CORS `*` in production (agent-service enforces via `APP_ENV=production` validation), and invalid config blocks startup.
+
+## 💾 Storage Configuration
+
+| Storage | Purpose | Config parameters | Notes |
+| --- | --- | --- | --- |
+| MySQL 8.0 | Audit logs / sync tasks (rag); Agent tasks / events (agent, disabled by default) | rag: `DATABASE_URL`; agent: `QINGCHUAN_AGENT_DATABASE_*` | SQLite works locally (`sqlite:///./data/qingchuan.db`); database must be created in advance (`utf8mb4`) |
+| Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | Default for local development; Milvus form below (built into compose) |
+| Milvus vector store | Dense vector index (Milvus form) | `VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` (local debugging connects to a local Milvus service; compose deployment hardcodes the internal `http://milvus:19530`) | docker compose ships etcd + MinIO + Milvus standalone (data on milvus-data / minio-data / etcd-data volumes); external Milvus supports auth (`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`) |
+| BM25 index | Sparse retrieval index (incremental inverted, keyword matching) | `./data/bm25/default.json` (index_name defaults to `default`) | Incrementally maintained in O(terms); snapshot persistence (default flush every 50 mutations + on shutdown) |
+| Document storage | rag uploaded source documents | `./data/documents` | DocumentRepository storage path |
+| Log files | loguru file rotation | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days (zip compression on agent side) |
+
 ## 📄 License
 
 [MIT License](LICENSE) © 2026 ChainEngine
+
+## 📚 References
+
+- Python: <https://www.python.org/>
+- uv: <https://docs.astral.sh/uv/>
+- FastAPI: <https://fastapi.tiangolo.com/>
+- Uvicorn: <https://www.uvicorn.org/>
+- LangGraph: <https://langchain-ai.github.io/langgraph/>
+- LangChain: <https://python.langchain.com/>
+- MCP (Model Context Protocol): <https://modelcontextprotocol.io/>
+- ChromaDB: <https://docs.trychroma.com/>
+- sentence-transformers: <https://www.sbert.net/>
+- SQLAlchemy: <https://www.sqlalchemy.org/>
+- PyMySQL: <https://pymysql.readthedocs.io/>
+- APScheduler: <https://apscheduler.readthedocs.io/>
+- pydantic: <https://docs.pydantic.dev/>
+- loguru: <https://loguru.readthedocs.io/>
+- Docker: <https://docs.docker.com/>
 
 ## 📮 Contact
 

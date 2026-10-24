@@ -76,6 +76,7 @@ This service reads configuration from the **root `.env` of the repository** (loa
 | `QINGCHUAN_AGENT_AI_LLM_API_KEY` / `BASE_URL` / `MODEL` | empty / empty / `deepseek-chat` | LLM provider config (Mock when no key is set) |
 | `QINGCHUAN_AGENT_RAG_MCP_URL` | `http://rag-service:8010/mcp` | rag-service MCP endpoint (use `http://127.0.0.1:8010/mcp` locally) |
 | `QINGCHUAN_AGENT_RAG_HTTP_BASE_URL` | `http://rag-service:8010` | rag HTTP fallback base URL (reserved) |
+| `QINGCHUAN_AGENT_CORS_ENABLED` / `QINGCHUAN_AGENT_CORS_ORIGINS` / `QINGCHUAN_AGENT_CORS_ALLOW_CREDENTIALS` | `true` / `*` / `true` | CORS toggle, allowed origins & credentials; `*` is forbidden in production (same behavior as rag-service) |
 | `QINGCHUAN_AGENT_LOGGING_LEVEL` | `INFO` | log level (`LOGGING_FILE_PATH` controls file path / rotation) |
 
 > Production (`APP_ENV=production`) enforces validation: DEBUG forbidden, CORS whitelist cannot be `*`, database HOST/DATABASE required when persistence is enabled, checkpoint must be redis — otherwise startup is blocked.
