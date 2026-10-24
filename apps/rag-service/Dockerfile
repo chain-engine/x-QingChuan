@@ -11,10 +11,11 @@ WORKDIR /app
 # 先复制清单，利用依赖层缓存
 COPY pyproject.toml uv.lock ./
 COPY packages/domain ./packages/domain
+COPY packages/common ./packages/common
 COPY apps/rag-service ./apps/rag-service
 
-# 仅安装 rag-service 及其 workspace 依赖（qingchuan-rag / qingchuan-domain）
-# 注意：rag 不依赖 packages/common，无需复制
+# 仅安装 rag-service 及其 workspace 依赖（qingchuan-rag / qingchuan-domain / qingchuan-common）
+# 注：统一响应信封沉淀于 qingchuan_common.http.response，rag 依赖 packages/common，必须复制
 RUN uv sync --package qingchuan-rag --no-dev --frozen
 
 ENV PATH="/app/.venv/bin:$PATH"
