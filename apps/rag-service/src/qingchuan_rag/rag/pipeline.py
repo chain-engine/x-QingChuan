@@ -4,12 +4,20 @@ RAG Pipeline Module
 RAG管道 — 编排检索、增强、生成三个环节
 """
 
+import time as _time
+from datetime import UTC, datetime
 from typing import Any
 
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.observability import emit
+from qingchuan_rag.core.observability.events import RagQueryEvent
 from qingchuan_rag.rag.augmentation import Augmentation
 from qingchuan_rag.rag.generation import LLMGeneration
 from qingchuan_rag.rag.retrieval import Retrieval
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class RAGPipeline:
@@ -80,50 +88,120 @@ class RAGPipeline:
         Returns:
             RAG查询结果
         """
-        # 1. 检索
-        retrieved_docs = self.retrieval.retrieve(
-            query=query,
-            top_k=top_k,
-            similarity_threshold=similarity_threshold,
-            use_mmr=use_mmr,
-            mmr_lambda=mmr_lambda,
-            metadata_filter=metadata_filter,
-        )
+        started_at = _utcnow()
+        t_total = _time.perf_counter()
+        try:
+            # 1. 检索（内部已发 RetrievalPhaseEvent）
+            t_phase = _time.perf_counter()
+            retrieved_docs = self.retrieval.retrieve(
+                query=query,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold,
+                use_mmr=use_mmr,
+                mmr_lambda=mmr_lambda,
+                metadata_filter=metadata_filter,
+            )
+            retrieval_ms = (_time.perf_counter() - t_phase) * 1000
 
-        if not retrieved_docs:
+            if not retrieved_docs:
+                total_ms = (_time.perf_counter() - t_total) * 1000
+                emit(
+                    RagQueryEvent(
+                        query=query,
+                        query_len=len(query),
+                        top_k=top_k,
+                        latencies={
+                            "retrieval": retrieval_ms,
+                            "augmentation": 0.0,
+                            "generation": 0.0,
+                            "total": total_ms,
+                        },
+                        tokens=None,
+                        provider="none",
+                        model="none",
+                        status="empty",
+                        error_type=None,
+                        started_at=started_at,
+                        ended_at=_utcnow(),
+                    )
+                )
+                return {
+                    "query": query,
+                    "answer": "抱歉，没有找到相关文档内容。",
+                    "retrieved_docs": [],
+                    "provider": "none",
+                    "model": "none",
+                    "tokens_used": None,
+                }
+
+            # 2. 增强
+            t_phase = _time.perf_counter()
+            augmented = self.augmentation.augment(
+                query=query,
+                retrieved_docs=retrieved_docs,
+            )
+            augmentation_ms = (_time.perf_counter() - t_phase) * 1000
+
+            # 3. 生成（内部已发 GenerationEvent）
+            t_phase = _time.perf_counter()
+            generation_result = await self.generation.generate(
+                prompt=augmented["full_prompt"],
+                provider=provider,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            generation_ms = (_time.perf_counter() - t_phase) * 1000
+
+            total_ms = (_time.perf_counter() - t_total) * 1000
+            emit(
+                RagQueryEvent(
+                    query=query,
+                    query_len=len(query),
+                    top_k=top_k,
+                    latencies={
+                        "retrieval": retrieval_ms,
+                        "augmentation": augmentation_ms,
+                        "generation": generation_ms,
+                        "total": total_ms,
+                    },
+                    tokens=generation_result.get("tokens_used"),
+                    provider=generation_result.get("provider", "unknown"),
+                    model=generation_result.get("model", "unknown"),
+                    status="ok",
+                    error_type=None,
+                    started_at=started_at,
+                    ended_at=_utcnow(),
+                )
+            )
+
+            # 4. 组装返回
             return {
                 "query": query,
-                "answer": "抱歉，没有找到相关文档内容。",
-                "retrieved_docs": [],
-                "provider": "none",
-                "model": "none",
-                "tokens_used": None,
+                "answer": generation_result["text"],
+                "retrieved_docs": retrieved_docs,
+                "provider": generation_result["provider"],
+                "model": generation_result["model"],
+                "tokens_used": generation_result["tokens_used"],
+                "augmentation_stats": {
+                    "context_count": augmented["context_count"],
+                    "context_length": augmented["context_length"],
+                },
             }
-
-        # 2. 增强
-        augmented = self.augmentation.augment(
-            query=query,
-            retrieved_docs=retrieved_docs,
-        )
-
-        # 3. 生成
-        generation_result = await self.generation.generate(
-            prompt=augmented["full_prompt"],
-            provider=provider,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
-        # 4. 组装返回
-        return {
-            "query": query,
-            "answer": generation_result["text"],
-            "retrieved_docs": retrieved_docs,
-            "provider": generation_result["provider"],
-            "model": generation_result["model"],
-            "tokens_used": generation_result["tokens_used"],
-            "augmentation_stats": {
-                "context_count": augmented["context_count"],
-                "context_length": augmented["context_length"],
-            },
-        }
+        except Exception as e:
+            logger.error(f"RAGPipeline query failed: {e}")
+            emit(
+                RagQueryEvent(
+                    query=query,
+                    query_len=len(query),
+                    top_k=top_k,
+                    latencies={"total": (_time.perf_counter() - t_total) * 1000},
+                    tokens=None,
+                    provider=provider or "unknown",
+                    model="unknown",
+                    status="error",
+                    error_type=type(e).__name__,
+                    started_at=started_at,
+                    ended_at=_utcnow(),
+                )
+            )
+            raise

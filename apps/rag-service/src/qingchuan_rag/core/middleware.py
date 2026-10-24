@@ -17,6 +17,8 @@ from slowapi.util import get_remote_address
 from qingchuan_rag.constants import HttpHeaders
 from qingchuan_rag.core.config import settings
 from qingchuan_rag.core.logger import logger
+from qingchuan_rag.core.observability import emit, reset_request_id, set_request_id
+from qingchuan_rag.core.observability.events import HttpRequestEvent
 
 # 限流器实例
 limiter = Limiter(
@@ -37,12 +39,16 @@ async def request_id_middleware(request: Request, call_next: Callable) -> Respon
     request_id: str = request.headers.get(HttpHeaders.X_REQUEST_ID.mark) or str(uuid.uuid4())
     request.state.request_id = request_id
 
-    with logger.contextualize(request_id=request_id):
-        response: Response = await call_next(request)
-        response.headers[HttpHeaders.X_REQUEST_ID.mark] = request_id
+    token = set_request_id(request_id)
+    try:
+        with logger.contextualize(request_id=request_id):
+            response: Response = await call_next(request)
+            response.headers[HttpHeaders.X_REQUEST_ID.mark] = request_id
 
-        logger.info(f"Request {request_id}: {request.method} {request.url.path}")
-    return response
+            logger.info(f"Request {request_id}: {request.method} {request.url.path}")
+        return response
+    finally:
+        reset_request_id(token)
 
 
 async def logging_middleware(request: Request, call_next: Callable) -> Response:
@@ -60,6 +66,14 @@ async def logging_middleware(request: Request, call_next: Callable) -> Response:
 
     logger.info(
         f"Request {request_id} completed in {process_time:.2f}ms with status {response.status_code}"
+    )
+
+    emit(
+        HttpRequestEvent(
+            endpoint=request.url.path,
+            status_class=f"{response.status_code // 100}xx",
+            latency_ms=process_time,
+        )
     )
 
     return response

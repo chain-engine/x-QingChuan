@@ -23,6 +23,7 @@ from qingchuan_rag.core.config import settings
 from qingchuan_rag.core.exceptions import AppException
 from qingchuan_rag.core.logger import logger, setup_logging
 from qingchuan_rag.core.middleware import setup_middleware
+from qingchuan_rag.core.observability import manager as obs_manager
 from qingchuan_rag.http_server.response import error_response, success_response
 from qingchuan_rag.http_server.router import api_router
 from qingchuan_rag.infras.database import init_database
@@ -46,6 +47,9 @@ async def lifespan(app: FastAPI):
     # 初始化日志配置（全局仅一次；控制台 DEBUG 彩色 / 生产 JSON，文件始终 JSON）
     setup_logging()
     logger.info("Starting x-QingChuan application...")
+
+    # 初始化可观测性（事件总线 + Provider 插件化；Provider 异常不影响业务启动）
+    obs_manager.initialize(settings)
 
     # 初始化数据库（审计日志 / 同步任务状态表）
     init_database()
@@ -83,6 +87,9 @@ async def lifespan(app: FastAPI):
         store_type=settings.VECTOR_STORE_TYPE,
         milvus_uri=settings.VECTOR_STORE_MILVUS_URI,
         dimension=settings.VECTOR_STORE_DIMENSION,
+        milvus_token=settings.VECTOR_STORE_MILVUS_TOKEN,
+        milvus_username=settings.VECTOR_STORE_MILVUS_USERNAME,
+        milvus_password=settings.VECTOR_STORE_MILVUS_PASSWORD,
     )
 
     # 初始化文档服务（同时构建稠密和稀疏索引）
@@ -174,6 +181,7 @@ async def lifespan(app: FastAPI):
     if document_service:
         document_service.shutdown()
 
+    obs_manager.shutdown()
     logger.info("Application shutdown complete")
 
 
@@ -260,6 +268,17 @@ def create_app() -> FastAPI:
         await response(scope, receive, send)
 
     app.router.default = _not_found_handler
+
+    # 可观测性快照（本地聚合：空召回率/失败率/P50-P95/检索耗时/生成 tokens 分布）
+    @app.get("/obs/stats", tags=["可观测性"])
+    async def obs_stats(request: Request):
+        """可观测性快照：五指标本地聚合（rolling 1h / 24h）。"""
+        agg = next((p for p in obs_manager.providers if p.name == "aggregator"), None)
+        windows = agg.snapshot() if agg else {}
+        return success_response(
+            data={"enabled": obs_manager.enabled, "windows": windows},
+            request=request,
+        )
 
     # 根路径
     @app.get("/", tags=["根路径"])

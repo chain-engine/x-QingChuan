@@ -138,6 +138,10 @@ class VectorStoreConfig:
     collection_name: str = "documents"
     distance: str = "cosine"
     milvus_uri: str = "./data/milvus.db"
+    # 远程 Milvus 鉴权（本地 milvus-lite 无需配置，留空即可）
+    milvus_token: str = ""
+    milvus_username: str = ""
+    milvus_password: str = ""
     dimension: int | None = None
 
 
@@ -227,6 +231,26 @@ class LLMProvidersConfig:
     mimo_model_name: str = "mimo-v2.6-pro"
 
 
+@dataclass
+class ObservabilityConfig:
+    """可观测性配置（事件总线 + Provider 插件化）。
+
+    - enabled: 总开关（false 时埋点零开销，所有 Provider 不注册）
+    - providers: 附加观测平台列表（默认 langfuse；LoggingProvider 恒注册兜底）
+    - trace_sample_rate: Langfuse trace 采样率 0~1（按 request_id 哈希，保证同一请求全量或全丢）
+    - mask_query: true 时 Langfuse trace 不记录 query 原文（人社数据脱敏选项）
+    - langfuse_*: 自托管 Langfuse 连接参数
+    """
+
+    enabled: bool = True
+    providers: list[str] = field(default_factory=lambda: ["langfuse"])
+    trace_sample_rate: float = 1.0
+    mask_query: bool = False
+    langfuse_host: str = "http://localhost:3000"
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+
+
 class Settings:
     """应用配置类
 
@@ -294,6 +318,9 @@ class Settings:
                 "collection_name": "documents",
                 "distance": "cosine",
                 "milvus_uri": "./data/milvus.db",
+                "milvus_token": "",
+                "milvus_username": "",
+                "milvus_password": "",
                 "dimension": None,
             },
             "storage": {
@@ -346,6 +373,15 @@ class Settings:
                 "mimo_api_key": "",
                 "mimo_api_base": "https://api.xiaomimimo.com/v1",
                 "mimo_model_name": "mimo-v2.6-pro",
+            },
+            "observability": {
+                "enabled": True,
+                "providers": ["langfuse"],
+                "trace_sample_rate": 1.0,
+                "mask_query": False,
+                "langfuse_host": "http://localhost:3000",
+                "langfuse_public_key": "",
+                "langfuse_secret_key": "",
             },
         }
 
@@ -402,6 +438,9 @@ class Settings:
             "VECTOR_STORE_DISTANCE": ("vector_store", "distance", str),
             # .env 统一使用 VECTOR_STORE_MILVUS_URI 前缀（避免与 pymilvus 保留的 MILVUS_URI 环境变量冲突）
             "VECTOR_STORE_MILVUS_URI": ("vector_store", "milvus_uri", str),
+            "VECTOR_STORE_MILVUS_TOKEN": ("vector_store", "milvus_token", str),
+            "VECTOR_STORE_MILVUS_USERNAME": ("vector_store", "milvus_username", str),
+            "VECTOR_STORE_MILVUS_PASSWORD": ("vector_store", "milvus_password", str),
             "VECTOR_STORE_DIMENSION": ("vector_store", "dimension", int),
             "TEXT_SPLITTER_PROVIDER": ("text_splitter", "provider", str),
             "TEXT_SPLITTER_STRATEGY": ("text_splitter", "strategy", str),
@@ -467,6 +506,30 @@ class Settings:
             "HRSS_API_TIMEOUT": ("sync", "data_source_timeout", float),
             "HRSS_MOCK": ("sync", "data_source_mock", lambda v: v.lower() == "true"),
             "HRSS_MOCK_COUNT": ("sync", "data_source_mock_count", int),
+            # 可观测性（事件总线 + Provider 插件化）
+            "OBSERVABILITY_ENABLED": (
+                "observability",
+                "enabled",
+                lambda v: v.lower() == "true",
+            ),
+            "OBSERVABILITY_PROVIDERS": (
+                "observability",
+                "providers",
+                lambda v: [x.strip() for x in v.split(",") if x.strip()],
+            ),
+            "OBSERVABILITY_TRACE_SAMPLE_RATE": (
+                "observability",
+                "trace_sample_rate",
+                float,
+            ),
+            "OBSERVABILITY_MASK_QUERY": (
+                "observability",
+                "mask_query",
+                lambda v: v.lower() == "true",
+            ),
+            "LANGFUSE_HOST": ("observability", "langfuse_host", str),
+            "LANGFUSE_PUBLIC_KEY": ("observability", "langfuse_public_key", str),
+            "LANGFUSE_SECRET_KEY": ("observability", "langfuse_secret_key", str),
         }
 
         for env_key, (section, field_key, converter) in env_mappings.items():
@@ -493,6 +556,7 @@ class Settings:
         self.generation = GenerationConfig(**self._config["generation"])
         self.llm = LLMDefaultsConfig(**self._config["llm"])
         self.llm_providers = LLMProvidersConfig(**self._config["llm_providers"])
+        self.observability = ObservabilityConfig(**self._config["observability"])
 
     def reload(self) -> None:
         """重新加载配置"""
@@ -575,6 +639,18 @@ class Settings:
     @property
     def VECTOR_STORE_MILVUS_URI(self) -> str:
         return self.vector_store.milvus_uri
+
+    @property
+    def VECTOR_STORE_MILVUS_TOKEN(self) -> str:
+        return self.vector_store.milvus_token
+
+    @property
+    def VECTOR_STORE_MILVUS_USERNAME(self) -> str:
+        return self.vector_store.milvus_username
+
+    @property
+    def VECTOR_STORE_MILVUS_PASSWORD(self) -> str:
+        return self.vector_store.milvus_password
 
     @property
     def VECTOR_STORE_DIMENSION(self) -> int | None:
@@ -693,6 +769,35 @@ class Settings:
     @property
     def MIMO_MODEL_NAME(self) -> str:
         return self.llm_providers.mimo_model_name
+
+    # ===== 可观测性 =====
+    @property
+    def OBSERVABILITY_ENABLED(self) -> bool:
+        return self.observability.enabled
+
+    @property
+    def OBSERVABILITY_PROVIDERS(self) -> list[str]:
+        return list(self.observability.providers)
+
+    @property
+    def OBSERVABILITY_TRACE_SAMPLE_RATE(self) -> float:
+        return self.observability.trace_sample_rate
+
+    @property
+    def OBSERVABILITY_MASK_QUERY(self) -> bool:
+        return self.observability.mask_query
+
+    @property
+    def LANGFUSE_HOST(self) -> str:
+        return self.observability.langfuse_host
+
+    @property
+    def LANGFUSE_PUBLIC_KEY(self) -> str:
+        return self.observability.langfuse_public_key
+
+    @property
+    def LANGFUSE_SECRET_KEY(self) -> str:
+        return self.observability.langfuse_secret_key
 
     # Legacy aliases for compatibility
     @property
@@ -854,6 +959,7 @@ __all__ = [
     "RetrievalConfig",
     "GenerationConfig",
     "LLMProvidersConfig",
+    "ObservabilityConfig",
     "Settings",
     "settings",
 ]
