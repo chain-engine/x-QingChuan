@@ -2,7 +2,11 @@
 """
 Schemas Package
 
-统一存放接口请求入参、响应返回Pydantic模型
+统一存放接口请求入参、响应返回Pydantic模型。
+
+RAG 检索 / 问答契约以共享领域包 qingchuan_domain 为单一事实来源，
+本包 re-export 供既有导入路径使用（RAGQueryRequest / RAGQueryResponse /
+RetrievalQuery / RetrievalResponse / RetrievedChunk / RetrievedDocument）。
 """
 
 from qingchuan_rag.schemas.base import (
@@ -33,16 +37,14 @@ from qingchuan_rag.schemas.rag import (
     GenerationResponse,
     RAGQueryRequest,
     RAGQueryResponse,
-    RetrievalRequest,
+    RetrievalQuery,
     RetrievalResponse,
+    RetrievedChunk,
     RetrievedDocument,
 )
 from qingchuan_rag.schemas.responses import (
-    ErrorResponse,
     PageModel,
     ResponseModel,
-    error_response,
-    success_response,
 )
 
 __all__ = [
@@ -53,15 +55,13 @@ __all__ = [
     # Responses
     "ResponseModel",
     "PageModel",
-    "ErrorResponse",
-    "success_response",
-    "error_response",
     # RAG
     "RAGQueryRequest",
-    "RetrievalRequest",
+    "RetrievalQuery",
     "EmbeddingRequest",
     "GenerationRequest",
     "RetrievedDocument",
+    "RetrievedChunk",
     "RAGQueryResponse",
     "EmbeddingResponse",
     "RetrievalResponse",

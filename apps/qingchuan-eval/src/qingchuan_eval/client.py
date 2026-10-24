@@ -37,7 +37,11 @@ class RagClient:
         use_mmr: bool | None = None,
         mmr_lambda: float | None = None,
     ) -> list[dict[str, Any]]:
-        """调用 /rag/retrieve，返回 RetrievedChunk dict 列表（按相关性降序）。"""
+        """调用 /rag/retrieve，返回 RetrievedChunk dict 列表（按相关性降序）。
+
+        响应契约以共享领域包 qingchuan_domain 为准：data 含 chunks / total
+        （chunks 键，领域 RetrievalResponse；早期 documents 键已统一收敛）。
+        """
         cfg = self._config
         thr = similarity_threshold if similarity_threshold is not None else cfg.similarity_threshold
         payload: dict[str, Any] = {
@@ -48,10 +52,10 @@ class RagClient:
             "mmr_lambda": mmr_lambda if mmr_lambda is not None else cfg.mmr_lambda,
         }
         data = self._post(cfg.retrieve_url, payload)
-        documents = data.get("documents") or []
-        if not isinstance(documents, list):
-            raise EvalClientError("retrieve 响应 documents 非列表")
-        return documents
+        chunks = data.get("chunks") or []
+        if not isinstance(chunks, list):
+            raise EvalClientError("retrieve 响应 chunks 非列表")
+        return chunks
 
     def query(
         self,

@@ -4,6 +4,7 @@ from qingchuan_domain.constants.base import BaseEnum, FloatBaseEnum, IntBaseEnum
 from qingchuan_domain.constants.enums import (
     AgentType,
     Environment,
+    HttpHeaders,
     HttpStatus,
     ToolPermissionLevel,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "BaseEnum",
     "Environment",
     "FloatBaseEnum",
+    "HttpHeaders",
     "HttpStatus",
     "IntBaseEnum",
     "StrBaseEnum",

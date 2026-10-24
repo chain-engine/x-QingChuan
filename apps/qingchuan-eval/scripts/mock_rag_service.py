@@ -1,7 +1,7 @@
 """mock rag-service：本地无真实服务时的链路冒烟目标。
 
 实现 POST /api/v1/rag/retrieve（响应包裹 {code,message,data,request_id}，
-data={query,documents,total}），用语料句子做 2-gram 重叠检索，返回 top_k 个
+data={query,chunks,total}，chunks 为领域契约 RetrievedChunk 结构），用语料句子做 2-gram 重叠检索，返回 top_k 个
 RetrievedChunk。仅用于 qingchuan-eval 的端到端冒烟，不代表真实检索质量。
 
 用法：
@@ -64,10 +64,10 @@ async def retrieve(request: Request) -> dict:
         for i in _INDEX.get(g, []):
             scores[i] = scores.get(i, 0) + 1
     ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))[:top_k]
-    documents = []
+    chunks = []
     for i, score in ranked:
         src, sent = _SENTENCES[i]
-        documents.append(
+        chunks.append(
             {
                 "chunk_id": f"{uuid.uuid4()}_chunk_{i}",
                 "document_id": str(uuid.uuid4()),
@@ -81,7 +81,7 @@ async def retrieve(request: Request) -> dict:
         "code": 0,
         "message": "ok",
         "request_id": str(uuid.uuid4()),
-        "data": {"query": query, "documents": documents, "total": len(documents)},
+        "data": {"query": query, "chunks": chunks, "total": len(chunks)},
     }
 
 

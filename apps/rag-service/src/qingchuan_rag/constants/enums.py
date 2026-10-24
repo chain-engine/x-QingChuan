@@ -9,22 +9,14 @@ Enums Module
     mark 为 str 的枚举（状态、类型、名称等） → StrBaseEnum
 """
 
-from qingchuan_domain.constants.enums import HttpStatus
+from qingchuan_domain.constants.enums import HttpHeaders, HttpStatus
 from qingchuan_rag.constants.base import StrBaseEnum
 
 # ====================================
 # 通用领域
 # ====================================
-# HttpStatus 单一事实来源在 qingchuan_domain.constants.enums（本文件顶部 re-export）
-
-
-class HeaderType(StrBaseEnum):
-    """HTTP 请求头类型枚举"""
-
-    REQUEST_ID = "X-Request-ID", "请求ID"
-    AUTHORIZATION = "Authorization", "授权令牌"
-    CONTENT_TYPE = "Content-Type", "内容类型"
-
+# HttpStatus / HttpHeaders 单一事实来源在 qingchuan_domain.constants.enums
+# （本文件顶部 re-export；HttpHeaders 由原 HeaderType 合并上移）
 
 # ====================================
 # RAG 领域
@@ -106,7 +98,7 @@ class EntityType(StrBaseEnum):
 
 __all__ = [
     "HttpStatus",
-    "HeaderType",
+    "HttpHeaders",
     "DocStatus",
     "DocType",
     "DistanceType",

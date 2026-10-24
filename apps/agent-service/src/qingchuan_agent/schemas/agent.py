@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from qingchuan_agent.constants import AgentType
+from qingchuan_agent.constants import AgentType, HumanDecision
 
 
 class AgentTaskCreate(BaseModel):
@@ -43,7 +43,7 @@ class AgentTaskResumeIn(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    decision: str = Field(description="人工决策：approve / reject / adjust")
+    decision: HumanDecision = Field(description="人工决策：approve / reject / adjust")
     remark: str | None = Field(default=None, description="人工备注")
     extra: dict[str, Any] = Field(
         default_factory=dict, description="附加数据（人工补充的调整信息）"
