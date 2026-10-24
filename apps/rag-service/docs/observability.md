@@ -107,6 +107,7 @@ curl -X POST http://localhost:8010/api/v1/rag/query \
 # core/observability/providers/my_provider.py
 from qingchuan_rag.core.observability.base import ObservabilityProvider
 
+
 class MyProvider(ObservabilityProvider):
     name = "my_platform"
 
@@ -118,8 +119,7 @@ class MyProvider(ObservabilityProvider):
         # 把事件翻译成自身形态；实现必须不抛异常
         ...
 
-    def shutdown(self) -> None:
-        ...
+    def shutdown(self) -> None: ...
 ```
 
 然后在 `core/observability/manager.py` 的 `initialize()` 循环中按 `name` 注册，

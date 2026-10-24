@@ -40,10 +40,29 @@ rid = f"smoke-{uuid.uuid4().hex[:8]}"
 now = datetime.now(UTC)
 tok = set_request_id(rid)
 try:
-    manager.emit(RetrievalPhaseEvent(stage="understand", latency_ms=2.5, started_at=now, ended_at=now))
-    manager.emit(RetrievalPhaseEvent(stage="candidate", latency_ms=9.0, candidates=12, started_at=now, ended_at=now))
-    manager.emit(RetrievalPhaseEvent(stage="rank_filter", latency_ms=6.0, candidates=12, retrieved=4, started_at=now, ended_at=now))
-    manager.emit(RetrievalPhaseEvent(stage="total", latency_ms=17.5, candidates=12, retrieved=4, started_at=now, ended_at=now))
+    manager.emit(
+        RetrievalPhaseEvent(stage="understand", latency_ms=2.5, started_at=now, ended_at=now)
+    )
+    manager.emit(
+        RetrievalPhaseEvent(
+            stage="candidate", latency_ms=9.0, candidates=12, started_at=now, ended_at=now
+        )
+    )
+    manager.emit(
+        RetrievalPhaseEvent(
+            stage="rank_filter",
+            latency_ms=6.0,
+            candidates=12,
+            retrieved=4,
+            started_at=now,
+            ended_at=now,
+        )
+    )
+    manager.emit(
+        RetrievalPhaseEvent(
+            stage="total", latency_ms=17.5, candidates=12, retrieved=4, started_at=now, ended_at=now
+        )
+    )
     manager.emit(
         GenerationEvent(
             tokens={"prompt_tokens": 210, "completion_tokens": 96, "total_tokens": 306},
@@ -89,5 +108,6 @@ names = {o.get("name") for o in data["data"]}
 assert "rag_query" in names and "retrieval" in names and "generation" in names, (
     f"v2 observations 缺少预期 span，got={sorted(names)}"
 )
-print(f"[4] v2 API 可见 {len(data['data'])} 条 observations（rag_query/retrieval/generation 均在），E2E SMOKE OK")
-
+print(
+    f"[4] v2 API 可见 {len(data['data'])} 条 observations（rag_query/retrieval/generation 均在），E2E SMOKE OK"
+)

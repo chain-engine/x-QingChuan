@@ -81,10 +81,39 @@ def _ok_events(request_id: str = "req-1"):
     """一条完整的 ok 请求事件序列。"""
     start = _now()
     events = [
-        RetrievalPhaseEvent(stage="understand", latency_ms=2.0, started_at=start, ended_at=start, request_id=request_id),
-        RetrievalPhaseEvent(stage="candidate", latency_ms=8.0, candidates=10, started_at=start, ended_at=start, request_id=request_id),
-        RetrievalPhaseEvent(stage="rank_filter", latency_ms=5.0, candidates=10, retrieved=3, started_at=start, ended_at=start, request_id=request_id),
-        RetrievalPhaseEvent(stage="total", latency_ms=15.0, candidates=10, retrieved=3, started_at=start, ended_at=start, request_id=request_id),
+        RetrievalPhaseEvent(
+            stage="understand",
+            latency_ms=2.0,
+            started_at=start,
+            ended_at=start,
+            request_id=request_id,
+        ),
+        RetrievalPhaseEvent(
+            stage="candidate",
+            latency_ms=8.0,
+            candidates=10,
+            started_at=start,
+            ended_at=start,
+            request_id=request_id,
+        ),
+        RetrievalPhaseEvent(
+            stage="rank_filter",
+            latency_ms=5.0,
+            candidates=10,
+            retrieved=3,
+            started_at=start,
+            ended_at=start,
+            request_id=request_id,
+        ),
+        RetrievalPhaseEvent(
+            stage="total",
+            latency_ms=15.0,
+            candidates=10,
+            retrieved=3,
+            started_at=start,
+            ended_at=start,
+            request_id=request_id,
+        ),
         GenerationEvent(
             tokens={"prompt_tokens": 120, "completion_tokens": 80, "total_tokens": 200},
             model="deepseek-v3",
@@ -243,7 +272,9 @@ class TestLangfuseProvider:
         p = _make_provider()
         start = _now()
         p.handle_event(
-            RetrievalPhaseEvent(stage="total", latency_ms=1.0, started_at=start, ended_at=start, request_id="req-z")
+            RetrievalPhaseEvent(
+                stage="total", latency_ms=1.0, started_at=start, ended_at=start, request_id="req-z"
+            )
         )
         assert p._pending
         p.shutdown()
@@ -296,21 +327,42 @@ class TestAggregator:
         agg = AggregatorProvider()
         now = _now()
         agg.handle_event(
-            RetrievalPhaseEvent(stage="total", latency_ms=10.0, candidates=5, retrieved=3, started_at=now, ended_at=now)
-        )
-        agg.handle_event(
-            RetrievalPhaseEvent(stage="total", latency_ms=20.0, candidates=0, retrieved=0, empty_reason="no_candidate", started_at=now, ended_at=now)
-        )
-        agg.handle_event(
-            RagQueryEvent(
-                query="x", query_len=1, top_k=3, latencies={"total": 15.0}, tokens=None,
-                provider="m", model="m2", status="error", error_type="TimeoutError",
-                started_at=now, ended_at=now,
+            RetrievalPhaseEvent(
+                stage="total",
+                latency_ms=10.0,
+                candidates=5,
+                retrieved=3,
+                started_at=now,
+                ended_at=now,
             )
         )
         agg.handle_event(
-            FailureEvent(phase="query", error_type="TimeoutError", message="x")
+            RetrievalPhaseEvent(
+                stage="total",
+                latency_ms=20.0,
+                candidates=0,
+                retrieved=0,
+                empty_reason="no_candidate",
+                started_at=now,
+                ended_at=now,
+            )
         )
+        agg.handle_event(
+            RagQueryEvent(
+                query="x",
+                query_len=1,
+                top_k=3,
+                latencies={"total": 15.0},
+                tokens=None,
+                provider="m",
+                model="m2",
+                status="error",
+                error_type="TimeoutError",
+                started_at=now,
+                ended_at=now,
+            )
+        )
+        agg.handle_event(FailureEvent(phase="query", error_type="TimeoutError", message="x"))
         snap = agg.snapshot()["window_3600s"]
         assert snap["retrieval_requests"] == 2
         assert snap["empty_retrieval"]["rate"] == 0.5
@@ -325,8 +377,13 @@ class TestAggregator:
         for i in range(3):
             agg.handle_event(
                 RetrievalPhaseEvent(
-                    stage="total", latency_ms=float(i + 1), candidates=0, retrieved=0,
-                    empty_reason="filtered_out", started_at=now, ended_at=now,
+                    stage="total",
+                    latency_ms=float(i + 1),
+                    candidates=0,
+                    retrieved=0,
+                    empty_reason="filtered_out",
+                    started_at=now,
+                    ended_at=now,
                 )
             )
         snap = agg.snapshot()["window_3600s"]
@@ -361,7 +418,11 @@ class TestManagerIsolation:
         m.register(_Recorder())
         token = set_request_id("req-ctx-1")
         try:
-            m.emit(RetrievalPhaseEvent(stage="total", latency_ms=1.0, started_at=_now(), ended_at=_now()))
+            m.emit(
+                RetrievalPhaseEvent(
+                    stage="total", latency_ms=1.0, started_at=_now(), ended_at=_now()
+                )
+            )
         finally:
             reset_request_id(token)
         assert seen == ["req-ctx-1"]
@@ -371,7 +432,9 @@ class TestManagerIsolation:
         m._enabled = True
         m.register(_BoomProvider())
         # 不应抛异常
-        m.emit(RetrievalPhaseEvent(stage="total", latency_ms=1.0, started_at=_now(), ended_at=_now()))
+        m.emit(
+            RetrievalPhaseEvent(stage="total", latency_ms=1.0, started_at=_now(), ended_at=_now())
+        )
 
     def test_disabled_manager_skips(self):
         m = manager.__class__()
@@ -384,5 +447,7 @@ class TestManagerIsolation:
                 hit.append(1)
 
         m.register(_R())
-        m.emit(RetrievalPhaseEvent(stage="total", latency_ms=1.0, started_at=_now(), ended_at=_now()))
+        m.emit(
+            RetrievalPhaseEvent(stage="total", latency_ms=1.0, started_at=_now(), ended_at=_now())
+        )
         assert hit == []

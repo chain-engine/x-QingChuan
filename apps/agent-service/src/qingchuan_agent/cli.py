@@ -28,9 +28,7 @@ def demo() -> None:
         logger.info(f"  已注册：[{spec.agent_type}] {spec.name}：{spec.description}")
 
     runtime = get_agent_runtime()
-    final_state = runtime.invoke_task(
-        "customer_service", {"query": "演示：养老金的领取条件是什么"}
-    )
+    final_state = runtime.invoke_task("customer_service", {"query": "演示：养老金的领取条件是什么"})
     logger.info(
         f"演示任务结束：status={final_state.get('status')} result={final_state.get('result')}"
     )

@@ -9,9 +9,7 @@ def print_summary(report: EvalReport) -> None:
     agg = report.aggregate
     print("=" * 56)
     print("晴川 RAG 评测报告")
-    print(
-        f"模式: {report.config.mode} | 样本: {agg.sample_count} | 错误率: {agg.error_rate:.1%}"
-    )
+    print(f"模式: {report.config.mode} | 样本: {agg.sample_count} | 错误率: {agg.error_rate:.1%}")
     print("-" * 56)
     print(f"  hit@1   : {fmt(agg.hit_at_1)}")
     print(f"  hit@3   : {fmt(agg.hit_at_3)}")
@@ -27,9 +25,7 @@ def print_summary(report: EvalReport) -> None:
     if report.thresholds:
         for t in report.thresholds:
             mark = "PASS" if t.passed else ("--" if t.passed is None else "FAIL")
-            print(
-                f"  门禁 {t.metric}: {fmt(t.actual)} vs {t.threshold:.3f}  [{mark}]"
-            )
+            print(f"  门禁 {t.metric}: {fmt(t.actual)} vs {t.threshold:.3f}  [{mark}]")
         verdict = report.all_thresholds_passed
         print(
             "  总体判定:",

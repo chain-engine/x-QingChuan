@@ -10,7 +10,6 @@ RAG 问答 / 检索的数据契约以共享领域包 qingchuan_domain 为单一�
 本模块仅保留 rag-service 本地独有 DTO（Embedding / Generation 嵌入与生成内部接口）。
 """
 
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from qingchuan_domain.schemas.rag import RAGQueryRequest, RAGQueryResponse, from_search_results

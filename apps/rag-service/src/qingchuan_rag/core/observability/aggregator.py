@@ -147,9 +147,7 @@ class AggregatorProvider(ObservabilityProvider):
             for win in self._windows.values():
                 win.add("request_latency_ms", event.latencies.get("total", 0.0))
                 if event.tokens:
-                    win.add(
-                        "generation_total_tokens", event.tokens.get("total_tokens") or 0
-                    )
+                    win.add("generation_total_tokens", event.tokens.get("total_tokens") or 0)
         elif isinstance(event, HttpRequestEvent):
             for win in self._windows.values():
                 win.flag("http_status", event.status_class)
@@ -210,16 +208,11 @@ class AggregatorProvider(ObservabilityProvider):
                 "by_phase": failures,
                 "rate": round(fail_total / http_total, 4) if http_total else None,
             },
-            "http_5xx_rate": round(statuses.get("5xx", 0) / http_total, 4)
-            if http_total
-            else None,
+            "http_5xx_rate": round(statuses.get("5xx", 0) / http_total, 4) if http_total else None,
         }
 
     def snapshot(self) -> dict[str, Any]:
-        return {
-            f"window_{key}": self._window_snapshot(win)
-            for key, win in self._windows.items()
-        }
+        return {f"window_{key}": self._window_snapshot(win) for key, win in self._windows.items()}
 
 
 __all__ = ["AggregatorProvider", "RollingWindow"]
