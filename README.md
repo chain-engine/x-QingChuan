@@ -54,7 +54,7 @@ uv run qingchuan-agent-api
 
 访问 <http://127.0.0.1:8020>，详见 [agent-service/README.md](apps/agent-service/README.md)。
 
-> **Docker 部署**：`docker compose up -d --build` 一次性编排 MySQL、Redis、Milvus（etcd + MinIO + Milvus standalone）、rag-service、agent-service（内部网络互通）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020（Milvus 仅内部网络）。阿里云生产部署详见 [DEPLOY.md](DEPLOY.md)。
+> **Docker 部署**：`docker compose up -d --build` 一次性编排 MySQL、Redis、rag-service、agent-service（内部网络互通；向量库默认 Chroma 本地持久化，零外部依赖）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020。需要 Milvus 时追加 `docker compose --profile milvus up -d`（etcd + MinIO + Milvus standalone，见 [DEPLOY.md](DEPLOY.md)）。
 
 ## 📁 项目结构
 
@@ -103,7 +103,7 @@ x-QingChuan/
 │   │   └── src/qingchuan_common/
 │   └── domain/                         # 共享领域包（实体 / Schema / 检索协议 / 端口，唯一事实来源）
 │       └── src/qingchuan_domain/
-├── docker-compose.yml                  # 一键独立部署 mysql + redis + milvus（etcd+minio+standalone）+ rag-service + agent-service
+├── docker-compose.yml                  # 一键部署 mysql + redis + rag-service + agent-service（向量库默认 Chroma；Milvus 三件套走 --profile milvus 可选）
 ├── pyproject.toml                      # uv 工作区根（members：apps/*、packages/*）
 ├── .env                                # 环境配置（不入库）
 ├── .pre-commit-config.yaml             # pre-commit 钩子（ruff）
@@ -286,8 +286,8 @@ MCP 端点：`/mcp`（Streamable HTTP），工具 `retrieve_docs` / `rag_query`�
 | 存储 | 用途 | 配置参数 | 备注 |
 | --- | --- | --- | --- |
 | MySQL 8.0 | 审计日志 / 同步任务（rag）；Agent 任务 / 事件（agent，默认关闭） | rag：`DATABASE_URL`；agent：`QINGCHUAN_AGENT_DATABASE_*` | 本地可 SQLite（`sqlite:///./data/qingchuan.db`）；库需提前创建（`utf8mb4`） |
-| Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | 本地开发默认；Milvus 形态见下（compose 部署内置） |
-| Milvus 向量库 | 稠密向量索引（Milvus 形态） | `VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530`（本地调试连本机 Milvus 服务；compose 部署内部固定 `http://milvus:19530`） | docker compose 内置 etcd + MinIO + Milvus standalone（数据落 milvus-data / minio-data / etcd-data 卷）；外部 Milvus 可加鉴权（`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`） |
+| Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **默认选型**：本地持久化，零外部依赖（单机 / 云主机直接可用） |
+| Milvus 向量库 | 稠密向量索引（Milvus 形态） | 需安装 extras：`uv sync --extra milvus`；`VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` | 可选后端；compose 内置三件套走 `docker compose --profile milvus up -d`（etcd + MinIO + Milvus standalone，数据落 milvus-data / minio-data / etcd-data 卷）；外部 Milvus 可加鉴权（`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`） |
 | BM25 索引 | 稀疏检索索引（增量倒排，关键词匹配） | `./data/bm25/default.json`（index_name 默认 `default`） | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘） |
 | 文档存储 | rag 上传的源文档 | `./data/documents` | DocumentRepository 存储路径 |
 | 日志文件 | loguru 文件轮转 | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | 按天轮转 / 保留 7 天（agent 侧 zip 压缩） |

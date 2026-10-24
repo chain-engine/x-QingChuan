@@ -6,7 +6,7 @@ name: x-qingchuan
 # 端口规划：
 #   - mysql  13306:3306   运维口（服务间走内部网络，如无需外部直连可去掉 ports）
 #   - redis  16379:6379   运维口（同上）
-#   - milvus 19530/9091   内部网络（etcd + minio + milvus standalone，不对外暴露，需外部直连自行加 ports）
+#   - milvus 19530/9091   可选 profile（--profile milvus 启用：etcd + minio + milvus standalone；默认不启动）
 #   - rag    8010:8010    对外服务口（阿里云安全组需放行）
 #   - agent  8020:8020    对外服务口（阿里云安全组需放行）
 #
@@ -96,11 +96,14 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Milvus 向量库（standalone：etcd 元数据 + minio 对象存储 + milvus 三组件，仅内部网络）
-  # 对齐本地调试 Milvus（D:\04Docker\Milvus）同款镜像与拓扑：etcd v3.5.5 / minio / milvus v2.4.0
+  # Milvus 向量库（可选 profile：standalone = etcd 元数据 + minio 对象存储 + milvus 三组件）
+  # 默认不启动（默认向量库为 Chroma，rag-service 本地持久化，零外部依赖）；
+  # 需要 Milvus 时：docker compose --profile milvus up -d
+  # 并设置 VECTOR_STORE_TYPE=milvus（建议先等 etcd/minio/milvus healthy 再起 rag-service）
   etcd:
     image: quay.io/coreos/etcd:v3.5.5
     container_name: x-QingChuan-etcd
+    profiles: ["milvus"]
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
       - ETCD_AUTO_COMPACTION_RETENTION=1000
@@ -135,6 +138,7 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: x-QingChuan-minio
+    profiles: ["milvus"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
@@ -167,6 +171,7 @@ services:
   milvus:
     image: milvusdb/milvus:v2.4.0
     container_name: x-QingChuan-milvus
+    profiles: ["milvus"]
     command: ["milvus", "run", "standalone"]
     environment:
       ETCD_ENDPOINTS: etcd:2379
@@ -211,12 +216,14 @@ services:
       MIMO_API_KEY: ${MIMO_API_KEY:-}
       MIMO_API_BASE: ${MIMO_API_BASE:-https://api.xiaomimimo.com/v1}
       MIMO_MODEL_NAME: ${MIMO_MODEL_NAME:-mimo-v2.6-pro}
-      # 向量存储：compose 内置 Milvus（standalone：etcd + minio + milvus），
-      # rag 经内部网络访问 http://milvus:19530；URI 固定写死不走 .env 变量替换，
-      # 避免与本地调试 .env 的 VECTOR_STORE_MILVUS_URI=http://localhost:19530 冲突；
-      # 如需切换外部 Milvus 服务，改此处为对应地址 + 鉴权参数
-      VECTOR_STORE_TYPE: milvus
-      VECTOR_STORE_MILVUS_URI: http://milvus:19530
+      # 向量存储：默认 Chroma（本地持久化到 /app/data/chroma，零外部依赖，阿里云/单机直接可用）
+      # 切换 Milvus（可选）：
+      #   1) docker compose --profile milvus up -d（先等 etcd/minio/milvus healthy）
+      #   2) 设 VECTOR_STORE_TYPE=milvus；服务经内部网络访问 http://milvus:19530
+      #   3) 如需外部 Milvus，改 VECTOR_STORE_MILVUS_URI 为对应地址 + 鉴权参数
+      VECTOR_STORE_TYPE: ${VECTOR_STORE_TYPE:-chroma}
+      VECTOR_STORE_PERSIST_DIR: ${VECTOR_STORE_PERSIST_DIR:-/app/data/chroma}
+      VECTOR_STORE_MILVUS_URI: ${VECTOR_STORE_MILVUS_URI:-http://milvus:19530}
       VECTOR_STORE_MILVUS_TOKEN: ${VECTOR_STORE_MILVUS_TOKEN:-}
       VECTOR_STORE_MILVUS_USERNAME: ${VECTOR_STORE_MILVUS_USERNAME:-}
       VECTOR_STORE_MILVUS_PASSWORD: ${VECTOR_STORE_MILVUS_PASSWORD:-}
@@ -233,15 +240,16 @@ services:
     ports:
       - "8010:8010"
     volumes:
-      - rag-data:/app/data          # milvus.db + 文档对象存储（documents/）
+      - rag-data:/app/data          # chroma 持久化 + 文档对象存储（documents/）
       - rag-logs:/app/apps/rag-service/logs
     networks:
       - backend
     depends_on:
       mysql:
         condition: service_healthy
-      milvus:
-        condition: service_healthy
+      # 注：默认不依赖 Milvus（默认 Chroma）。--profile milvus 模式下，
+      # 建议先 `docker compose --profile milvus up -d etcd minio milvus` 等 healthy，
+      # 再 `docker compose --profile milvus up -d`（或整体 up 后按日志确认）。
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request, socket; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8010/api/v1/health')"]
       interval: 30s
@@ -335,6 +343,7 @@ services:
 volumes:
   mysql-data:
   redis-data:
+  # Milvus profile 专用卷（默认 Chroma 不启用）
   etcd-data:
   minio-data:
   milvus-data:

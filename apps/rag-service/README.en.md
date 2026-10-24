@@ -100,7 +100,7 @@ uv run qingchuan-rag-api --port 8010    # override the listen port
 uv run uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
-**Docker container deployment** (run from the repository root; compose ships a built-in Milvus vector store — etcd + MinIO + Milvus standalone — and rag-service automatically connects to the internal `http://milvus:19530`):
+**Docker container deployment** (run from the repository root; vector store defaults to Chroma with local persistence — zero external dependencies. To switch to Milvus, first `docker compose --profile milvus up -d` to start the built-in etcd + MinIO + Milvus standalone and set `VECTOR_STORE_TYPE=milvus`):
 
 ```bash
 docker compose up --build rag-service
@@ -365,7 +365,7 @@ The service enables **Swagger interactive docs / ReDoc read-only docs / OpenAPI 
 | Storage | Purpose | Config parameters | Notes |
 | --- | --- | --- | --- |
 | MySQL 8.0 | Audit logs / sync task status | `DATABASE_URL` | Required in production; SQLite works locally (`sqlite:///./data/qingchuan.db`); database must be created in advance (`utf8mb4`) |
-| Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | Persisted at `data/chroma`; Milvus optional (`VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`) |
+| Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **Default**: local persistence, zero external dependencies; Milvus optional (`uv sync --extra milvus` + `VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`) |
 | BM25 index | Sparse retrieval index (incremental inverted, keyword matching) | `./data/bm25/default.json` (index_name defaults to `default`) | Incrementally maintained in O(terms); snapshot persistence (default flush every 50 mutations + on shutdown) |
 | Document storage | Uploaded source documents | `./data/documents` | DocumentRepository storage path |
 | Log files | loguru file rotation | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days |

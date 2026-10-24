@@ -100,7 +100,7 @@ uv run qingchuan-rag-api --port 8010    # 覆盖监听端口
 uv run uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
-**Docker 容器部署**（仓库根目录执行；compose 内置 Milvus 向量库，etcd + MinIO + Milvus standalone 三组件，rag-service 自动连接内部 `http://milvus:19530`）：
+**Docker 容器部署**（仓库根目录执行；向量库默认 Chroma 本地持久化，零外部依赖；如切 Milvus：先 `docker compose --profile milvus up -d` 起内置三件套并设 `VECTOR_STORE_TYPE=milvus`）：
 
 ```bash
 docker compose up --build rag-service
@@ -365,7 +365,7 @@ flowchart LR
 | 存储 | 用途 | 配置参数 | 备注 |
 | --- | --- | --- | --- |
 | MySQL 8.0 | 审计日志 / 同步任务状态 | `DATABASE_URL` | 生产必需；本地可 SQLite（`sqlite:///./data/qingchuan.db`）；数据库需提前创建（`utf8mb4`） |
-| Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | 持久化于 `data/chroma`；可选 Milvus（`VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`） |
+| Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **默认选型**：本地持久化，零外部依赖；Milvus 可选（`uv sync --extra milvus` + `VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`） |
 | BM25 索引 | 稀疏检索索引（增量倒排，关键词匹配） | `./data/bm25/default.json`（index_name 默认 `default`） | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘） |
 | 文档存储 | 上传的源文档 | `./data/documents` | DocumentRepository 存储路径 |
 | 日志文件 | loguru 文件轮转 | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | 按天轮转 / 保留 7 天 |

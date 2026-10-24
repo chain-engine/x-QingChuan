@@ -2,8 +2,12 @@
 """
 Vector Store Module
 
-向量存储基础设施：抽象基类 + Chroma 实现。
-后续新增向量数据库时，在本模块中扩展新的实现类。
+向量存储基础设施：抽象基类 + Chroma 默认实现 + Milvus 可选实现。
+
+默认选型为 Chroma（本地持久化，零外部依赖，单机 / 阿里云 ECS 直接可用）。
+Milvus 为可选后端（extras：``qingchuan-rag[milvus]``），通过
+``VECTOR_STORE_TYPE=milvus`` 切换；pymilvus 采用惰性导入，
+未安装 extras 时服务仍可正常启动（默认 Chroma 不受影响）。
 """
 
 from abc import ABC, abstractmethod
@@ -11,11 +15,27 @@ from typing import Any
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
 
 from qingchuan_rag.core.exceptions import VectorStoreError
 from qingchuan_rag.core.logger import logger
 from qingchuan_rag.core.paths import resolve_service_path
+
+
+def _load_milvus_symbols() -> tuple[Any, Any, Any, Any]:
+    """惰性加载 pymilvus 符号（可选依赖）。
+
+    仅 MilvusVectorStore 实际使用时才 import；未安装 ``qingchuan-rag[milvus]``
+    时抛出带安装指引的 VectorStoreError，不影响默认 Chroma 路径。
+    """
+    try:
+        from pymilvus import CollectionSchema, DataType, FieldSchema, MilvusClient
+    except ImportError as e:  # pragma: no cover - 依赖缺失分支
+        raise VectorStoreError(
+            "Milvus backend not installed. "
+            "Install extras: `uv sync --extra milvus` "
+            "or `pip install \"qingchuan-rag[milvus]\"`"
+        ) from e
+    return CollectionSchema, DataType, FieldSchema, MilvusClient
 
 
 class VectorStoreBase(ABC):
@@ -356,10 +376,11 @@ class ChromaVectorStore(VectorStoreBase):
 
 
 class MilvusVectorStore(VectorStoreBase):
-    """Milvus 向量存储实现（本地 milvus-lite 文件模式 / 远程 Milvus 服务）。
+    """Milvus 向量存储实现（可选后端，需安装 ``qingchuan-rag[milvus]`` extras）。
 
-    通过配置 uri 切换：
-        - 本地文件模式（开发默认）：uri="./data/milvus.db"（依赖 milvus-lite）
+    默认选型为 Chroma；切回 Milvus 时通过配置 ``VECTOR_STORE_TYPE=milvus``
+    + uri 切换：
+        - 本地文件模式（调试）：uri="./data/milvus.db"（依赖 milvus-lite）
         - 远程服务模式（生产）：uri="http://milvus:19530"（依赖 pymilvus）
 
     远程鉴权（生产常见）：
@@ -397,7 +418,7 @@ class MilvusVectorStore(VectorStoreBase):
         self._token = token or None
         self._username = username or None
         self._password = password or None
-        self._client: MilvusClient | None = None
+        self._client: Any | None = None
         self._initialized = False
 
     def initialize(self) -> None:
@@ -405,6 +426,7 @@ class MilvusVectorStore(VectorStoreBase):
         if self._initialized:
             return
         try:
+            *_, MilvusClient = _load_milvus_symbols()
             client_kwargs: dict[str, Any] = {"uri": self._uri}
             # 鉴权参数仅在显式配置时传入（MilvusClient 的 user/password/token 均默认空串）
             if self._token:
@@ -610,6 +632,7 @@ class MilvusVectorStore(VectorStoreBase):
 
     def _create_collection(self, dimension: int) -> None:
         """创建集合（varchar 主键 + float vector + 动态字段承载元数据）。"""
+        CollectionSchema, DataType, FieldSchema, _ = _load_milvus_symbols()
         fields = [
             FieldSchema("id", DataType.VARCHAR, max_length=128, is_primary=True),
             FieldSchema("vector", DataType.FLOAT_VECTOR, dim=dimension),

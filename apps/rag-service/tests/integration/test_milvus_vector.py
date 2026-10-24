@@ -12,6 +12,10 @@ from pathlib import Path
 
 import pytest
 
+# Milvus 为可选后端（extras: qingchuan-rag[milvus]）；未安装时整文件跳过
+pytest.importorskip("pymilvus")
+pytest.importorskip("milvus_lite")
+
 from qingchuan_rag.core.exceptions import VectorStoreError
 from qingchuan_rag.infras.vector import MilvusVectorStore
 

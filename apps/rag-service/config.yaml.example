@@ -76,14 +76,20 @@ embedding:
 
 # ====================================
 # 向量存储配置
-# type: milvus | chroma
-#   milvus：默认（生产推荐）。本地用 milvus-lite 文件模式（uri 指向本地文件），生产改远程 Milvus
-#           Standalone 地址（如 http://milvus-host:19530）
-#   chroma：开发备选，持久化于 persist_directory
+# type: chroma | milvus
+#   chroma：默认。本地持久化目录（persist_directory），零外部依赖，单机 / 云主机直接可用
+#   milvus：可选。需安装 extras（uv sync --extra milvus）；本地用 milvus-lite 文件模式
+#           （milvus_uri 指向本地文件），生产改远程 Milvus Standalone 地址
+#           （如 http://milvus-host:19530）
 # ====================================
 vector_store:
-  type: milvus
-  # milvus 后端
+  type: chroma
+  # chroma 后端（默认）
+  persist_directory: ./data/chroma
+  collection_name: documents
+  distance: cosine
+  dimension: 1024                # 与 embedding 模型（bge-m3）输出维度一致
+  # milvus 后端（type: milvus 时启用；需安装 extras）
   milvus_uri: ./data/milvus.db   # 本地 milvus-lite 文件；生产为远程地址 http://host:19530
   # 远程 Milvus 鉴权（本地 milvus-lite 无需配置，留空即可）
   #   token：Milvus RBAC / JWT token（Zilliz Cloud 等托管服务使用）
@@ -91,11 +97,6 @@ vector_store:
   milvus_token: ""
   milvus_username: ""
   milvus_password: ""
-  collection_name: documents
-  distance: cosine
-  dimension: 1024                # 与 embedding 模型（bge-m3）输出维度一致
-  # chroma 后端（type: chroma 时生效）
-  persist_directory: ./data/chroma
 
 # ====================================
 # 文本切分配置

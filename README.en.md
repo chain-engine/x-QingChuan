@@ -54,7 +54,7 @@ uv run qingchuan-agent-api
 
 Access <http://127.0.0.1:8020>. See [agent-service/README.en.md](apps/agent-service/README.en.md).
 
-> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, Milvus (etcd + MinIO + Milvus standalone), rag-service and agent-service (internal network only). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
+> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, rag-service and agent-service (vector store defaults to Chroma with local persistence — zero external dependencies). For Milvus, append `docker compose --profile milvus up -d` (etcd + MinIO + Milvus standalone). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
 
 ## 📁 Project Structure
 
@@ -103,7 +103,7 @@ x-QingChuan/
 │   │   └── src/qingchuan_common/
 │   └── domain/                         # Shared domain package (entities / schemas / retrieval protocols / ports, single source of truth)
 │       └── src/qingchuan_domain/
-├── docker-compose.yml                  # One-command orchestration of mysql + redis + milvus (etcd+minio+standalone) + rag-service + agent-service
+├── docker-compose.yml                  # One-command orchestration of mysql + redis + rag-service + agent-service (vector store defaults to Chroma; Milvus trio via --profile milvus)
 ├── pyproject.toml                      # uv workspace root (members: apps/*, packages/*)
 ├── .env                                # Environment config (not committed)
 ├── .pre-commit-config.yaml             # pre-commit hooks (ruff)
@@ -286,8 +286,8 @@ MCP endpoint: `/mcp` (Streamable HTTP), tools `retrieve_docs` / `rag_query` (rea
 | Storage | Purpose | Config parameters | Notes |
 | --- | --- | --- | --- |
 | MySQL 8.0 | Audit logs / sync tasks (rag); Agent tasks / events (agent, disabled by default) | rag: `DATABASE_URL`; agent: `QINGCHUAN_AGENT_DATABASE_*` | SQLite works locally (`sqlite:///./data/qingchuan.db`); database must be created in advance (`utf8mb4`) |
-| Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | Default for local development; Milvus form below (built into compose) |
-| Milvus vector store | Dense vector index (Milvus form) | `VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` (local debugging connects to a local Milvus service; compose deployment hardcodes the internal `http://milvus:19530`) | docker compose ships etcd + MinIO + Milvus standalone (data on milvus-data / minio-data / etcd-data volumes); external Milvus supports auth (`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`) |
+| Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **Default**: local persistence, zero external dependencies (single node / cloud VM ready) |
+| Milvus vector store | Dense vector index (Milvus form) | Requires extras: `uv sync --extra milvus`; `VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` | Optional backend; compose ships etcd + MinIO + Milvus standalone via `docker compose --profile milvus up -d` (data on milvus-data / minio-data / etcd-data volumes); external Milvus supports auth (`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`) |
 | BM25 index | Sparse retrieval index (incremental inverted, keyword matching) | `./data/bm25/default.json` (index_name defaults to `default`) | Incrementally maintained in O(terms); snapshot persistence (default flush every 50 mutations + on shutdown) |
 | Document storage | rag uploaded source documents | `./data/documents` | DocumentRepository storage path |
 | Log files | loguru file rotation | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days (zip compression on agent side) |
