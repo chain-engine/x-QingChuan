@@ -26,7 +26,7 @@ logging:
 database:
   # 默认 MySQL（生产）；本地开发可切回 sqlite:///./data/qingchuan.db
   # 注意：数据库需提前创建（如 CREATE DATABASE qingchuan CHARACTER SET utf8mb4）
-  db_url: "mysql+pymysql://yeyushilai:123456@127.0.0.1:3306/qingchuan?charset=utf8mb4"
+  db_url: "mysql+pymysql://qingchuan:change-me-db-password@127.0.0.1:3306/qingchuan?charset=utf8mb4"
 
 # ====================================
 # 文件存储配置（文档内容对象存储；元数据入库后内容走此层）
@@ -160,6 +160,23 @@ llm_providers:
   mimo_api_key: your-mimo-api-key
   mimo_api_base: https://api.xiaomimimo.com/v1
   mimo_model_name: mimo-v2.6-pro
+
+# ====================================
+# 可观测性配置（事件总线 + Provider 插件化）
+#   enabled：总开关（false 时埋点零开销，所有 Provider 不注册）
+#   providers：附加观测平台列表（默认 langfuse；LoggingProvider 恒注册兜底）
+#   trace_sample_rate：Langfuse trace 采样率 0~1（按 request_id 哈希，同一请求全量或全丢）
+#   mask_query：true 时 Langfuse trace 不记录 query 原文（人社数据脱敏选项）
+#   langfuse_*：自托管 Langfuse 连接参数（参考 apps/rag-service/deploy/langfuse/compose.yaml）
+# ====================================
+observability:
+  enabled: true
+  providers: ["langfuse"]
+  trace_sample_rate: 1.0
+  mask_query: false
+  langfuse_host: "http://localhost:3000"
+  langfuse_public_key: "pk-local-qingchuan"
+  langfuse_secret_key: "sk-local-qingchuan"
 
 # ====================================
 # 限流配置
