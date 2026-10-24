@@ -31,6 +31,19 @@ qingchuan-common = { workspace = true }
 qingchuan-agent = "qingchuan_agent.cli:main"
 qingchuan-agent-api = "qingchuan_agent.cli:serve"
 
+# 开发依赖组（与 rag-service 对齐）：pytest-asyncio 供 agent 异步测试使用。
+# 此前只声明在 rag 的 dev 组，单包运行 `uv run --package qingchuan-agent pytest`
+# 会缺插件；补在此处后单包测试无需再手挂 --with pytest-asyncio。
+[dependency-groups]
+dev = [
+  "pytest>=7.4.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.1.0",
+  "pytest-mock>=3.12.0",
+  "ruff>=0.1.5",
+  "pre-commit>=3.5.0",
+]
+
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"
 default = true
