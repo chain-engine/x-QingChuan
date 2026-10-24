@@ -166,7 +166,7 @@ flowchart LR
 | Registration / routing | AgentRegistry | task_type → AgentSpec mapping-table routing, lazy compile cache |
 | LLM access | LangChain (OpenAI-compatible) | DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
 | MCP | mcp 2.3+ | rag-service Streamable HTTP (/mcp); agent calls via MCP client |
-| Vector retrieval | Milvus (standalone: etcd + MinIO, built into compose) / ChromaDB (local development default) + sentence-transformers (BAAI/bge-m3) | Dense index; deployment connects to `http://milvus:19530`, local development persists at `data/chroma` |
+| Vector retrieval | ChromaDB (default, local persistence, zero external deps) / Milvus (optional: extras + compose --profile milvus for etcd+MinIO+standalone) + sentence-transformers (BAAI/bge-m3) | Dense index; default persists at `data/chroma`, switch via `VECTOR_STORE_TYPE=milvus` |
 | Sparse retrieval | BM25IndexStore (self-built incremental inverted index) | Inverted index + Okapi BM25 scoring, incrementally maintained in O(terms), hybrid with vector retrieval; rank-bm25 kept only for consistency comparison & fallback path |
 | Business DB | SQLAlchemy 2 + PyMySQL (MySQL 8) | Audit logs / sync tasks / Agent tasks & events |
 | Cache / state | Redis 7 | agent checkpoint (redis required in production) + event bus |
@@ -174,7 +174,7 @@ flowchart LR
 | Config | pydantic-settings / pydantic + PyYAML | Segmented prefixed config; invalid config blocks startup |
 | Logging | loguru | Colored console / file rotation (1 day / keep 7 days) |
 | Engineering | uv + ruff + pre-commit + pytest | Workspace deps, static checks, tests |
-| Deployment | Docker Compose | One-command orchestration of MySQL + Redis + Milvus (etcd+MinIO+standalone) + both services |
+| Deployment | Docker Compose | One-command orchestration of MySQL + Redis + both services (internal network, no host deps); Milvus optional via --profile milvus (etcd+MinIO+standalone) |
 
 ## 🛠️ Technology Stack
 

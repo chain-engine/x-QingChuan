@@ -166,7 +166,7 @@ flowchart LR
 | 注册 / 路由  | AgentRegistry                                                                                    | task\_type → AgentSpec 映射表路由，惰性编译缓存                                    |
 | LLM 接入   | LangChain（OpenAI 兼容）                                                                             | DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo                                        |
 | MCP      | mcp 2.3+                                                                                         | rag-service Streamable HTTP（/mcp）；agent 经 MCP 客户端调用                    |
-| 向量检索     | Milvus（standalone：etcd + MinIO，compose 内置）/ ChromaDB（本地开发默认）+ sentence-transformers（BAAI/bge-m3） | 稠密索引；部署连 `http://milvus:19530`，本地开发持久化于 `data/chroma`                  |
+| 向量检索     | ChromaDB（默认，本地持久化，零外部依赖）/ Milvus（可选：extras + compose --profile milvus 启用 etcd+MinIO+standalone）+ sentence-transformers（BAAI/bge-m3） | 稠密索引；默认持久化于 `data/chroma`，切换 Milvus 经 `VECTOR_STORE_TYPE=milvus` |
 | 稀疏检索     | BM25IndexStore（自研增量倒排）                                                                           | 倒排表 + Okapi BM25 打分，增删 O(词数) 增量维护，与向量检索混合；rank-bm25 仅一致性对比与备用路径        |
 | 业务库      | SQLAlchemy 2 + PyMySQL（MySQL 8）                                                                  | 审计日志 / 同步任务 / Agent 任务与事件                                              |
 | 缓存 / 状态  | Redis 7                                                                                          | agent checkpoint（生产强制 redis）+ 事件总线                                     |
@@ -174,7 +174,7 @@ flowchart LR
 | 配置       | pydantic-settings / pydantic + PyYAML                                                            | 分段带前缀配置；非法配置阻断启动                                                       |
 | 日志       | loguru                                                                                           | 彩色控制台 / 文件轮转（1 天 / 保留 7 天）                                             |
 | 工程化      | uv + ruff + pre-commit + pytest                                                                  | 工作区依赖、静态检查、测试                                                          |
-| 部署       | Docker Compose                                                                                   | 一键独立部署 MySQL + Redis + Milvus（etcd+MinIO+standalone）+ 双服务（内部网络，不依赖宿主机） |
+| 部署       | Docker Compose                                                                                   | 一键独立部署 MySQL + Redis + 双服务（内部网络，不依赖宿主机）；Milvus 可选（--profile milvus 启用 etcd+MinIO+standalone） |
 
 ## 🛠️ 技术栈
 
