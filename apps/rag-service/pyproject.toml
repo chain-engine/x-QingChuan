@@ -12,6 +12,7 @@ keywords = ["rag", "retrieval-augmented-generation", "llm", "vector-database", "
 
 dependencies = [
   "qingchuan-domain",
+  "qingchuan-common",
   # Web / API
   "fastapi>=0.104.0",
   "uvicorn[standard]>=0.24.0",
@@ -55,6 +56,7 @@ dependencies = [
 
 [tool.uv.sources]
 qingchuan-domain = { workspace = true }
+qingchuan-common = { workspace = true }
 # torch 固定从 CPU-only 索引拉取（index 定义见下方 [[tool.uv.index]] pytorch-cpu）
 torch = { index = "pytorch-cpu" }
 
@@ -118,4 +120,4 @@ select = ["E", "W", "F", "I", "B", "C4", "UP"]
 ignore = ["E501", "B008", "UP046"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["qingchuan_rag", "qingchuan_domain"]
+known-first-party = ["qingchuan_rag", "qingchuan_domain", "qingchuan_common"]

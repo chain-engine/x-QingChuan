@@ -10,6 +10,7 @@ Agent 编排域专属枚举（TaskStatus / AgentRunStatus / RouteMode 等）保�
 from qingchuan_domain.constants.enums import (
     AgentType,
     Environment,
+    HttpHeaders,
     HttpStatus,
     ToolPermissionLevel,
 )
@@ -19,7 +20,7 @@ from qingchuan_agent.constants.base import StrBaseEnum
 # ====================================
 # 通用领域（re-export 共享领域包）
 # ====================================
-# Environment / HttpStatus / AgentType / ToolPermissionLevel 见 qingchuan_domain.constants.enums
+# Environment / HttpStatus / HttpHeaders / AgentType / ToolPermissionLevel 见 domain constants
 
 # ====================================
 # Agent 编排域（服务内概念）
@@ -32,10 +33,12 @@ class ApiResponseMessage(StrBaseEnum):
     VALIDATION_ERROR = "参数校验失败", "参数校验失败"
 
 
-class HttpHeaders(StrBaseEnum):
-    """HTTP 请求 / 响应头"""
+class HumanDecision(StrBaseEnum):
+    """人工接管决策（waiting_human 任务的用户处理结果）"""
 
-    X_REQUEST_ID = "X-Request-ID", "请求ID"
+    APPROVE = "approve", "批准"
+    REJECT = "reject", "拒绝"
+    ADJUST = "adjust", "调整"
 
 
 class TaskStatus(StrBaseEnum):
@@ -69,6 +72,7 @@ __all__ = [
     "Environment",
     "HttpHeaders",
     "HttpStatus",
+    "HumanDecision",
     "RouteMode",
     "TaskStatus",
     "ToolPermissionLevel",

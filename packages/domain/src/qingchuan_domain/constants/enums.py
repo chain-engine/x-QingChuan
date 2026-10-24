@@ -56,9 +56,18 @@ class ToolPermissionLevel(StrBaseEnum):
     WRITE = "write", "写"
 
 
+class HttpHeaders(StrBaseEnum):
+    """HTTP 请求 / 响应头（跨服务共享；原 rag HeaderType 与 agent HttpHeaders 合并）"""
+
+    X_REQUEST_ID = "X-Request-ID", "请求ID"
+    AUTHORIZATION = "Authorization", "授权令牌"
+    CONTENT_TYPE = "Content-Type", "内容类型"
+
+
 __all__ = [
     "AgentType",
     "Environment",
+    "HttpHeaders",
     "HttpStatus",
     "ToolPermissionLevel",
 ]

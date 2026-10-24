@@ -2,147 +2,45 @@
 """
 RAG Schema Module
 
-RAG相关接口的请求和响应模型
+RAG相关接口的请求和响应模型。
+
+RAG 问答 / 检索的数据契约以共享领域包 qingchuan_domain 为单一事实来源：
+    - RAGQueryRequest / RAGQueryResponse / from_search_results → qingchuan_domain.schemas.rag
+    - RetrievalQuery / RetrievalResponse / RetrievedChunk         → qingchuan_domain.schemas.retrieval
+本模块仅保留 rag-service 本地独有 DTO（Embedding / Generation 嵌入与生成内部接口）。
 """
 
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from qingchuan_domain.schemas.retrieval import RetrievedChunk
+from qingchuan_domain.schemas.rag import RAGQueryRequest, RAGQueryResponse, from_search_results
+from qingchuan_domain.schemas.retrieval import RetrievalQuery, RetrievalResponse, RetrievedChunk
 from qingchuan_rag.constants import (
     DEFAULT_MAX_TOKENS,
-    DEFAULT_MMR_LAMBDA,
-    DEFAULT_SIMILARITY_THRESHOLD,
     DEFAULT_TEMPERATURE,
     DEFAULT_TIMEOUT,
-    DEFAULT_TOP_K,
 )
 
-
-class RAGQueryRequest(BaseModel):
-    """RAG查询请求"""
-
-    query: str = Field(
-        ...,
-        min_length=1,
-        max_length=2000,
-        description="用户查询内容，支持中英文",
-        examples=["什么是RAG？"],
-    )
-    top_k: int = Field(
-        default=DEFAULT_TOP_K,
-        ge=1,
-        le=20,
-        description="返回相关文档数量，默认5",
-        examples=[5],
-    )
-    similarity_threshold: float = Field(
-        default=DEFAULT_SIMILARITY_THRESHOLD,
-        ge=0.0,
-        le=1.0,
-        description="相似度阈值，低于该值的文档被过滤，默认0.7",
-        examples=[0.7],
-    )
-    use_mmr: bool = Field(
-        default=False,
-        description="是否使用MMR算法增加结果多样性",
-        examples=[False],
-    )
-    mmr_lambda: float = Field(
-        default=DEFAULT_MMR_LAMBDA,
-        ge=0.0,
-        le=1.0,
-        description="MMR参数，0.0=多样性优先，1.0=相关性优先",
-        examples=[0.5],
-    )
-    metadata_filter: dict[str, Any] | None = Field(
-        default=None,
-        description='元数据过滤条件，如 {"file_type": "pdf"}',
-        examples=[None],
-    )
-    provider: str | None = Field(
-        default=None,
-        description="LLM提供商，为空使用默认",
-        examples=[None],
-    )
-    temperature: float = Field(
-        default=DEFAULT_TEMPERATURE,
-        ge=0.0,
-        le=2.0,
-        description="生成温度，0.0=确定性，2.0=创造性",
-        examples=[0.3],
-    )
-    max_tokens: int = Field(
-        default=DEFAULT_MAX_TOKENS,
-        ge=1,
-        le=8000,
-        description="生成回答的最大token数",
-        examples=[2000],
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "query": "什么是RAG技术？它解决了什么问题？",
-                "top_k": 5,
-                "similarity_threshold": 0.7,
-                "use_mmr": False,
-                "mmr_lambda": 0.5,
-                "metadata_filter": {"file_type": "pdf"},
-                "provider": None,
-                "temperature": 0.3,
-                "max_tokens": 2000,
-            }
-        },
-    )
+__all__ = [
+    "EmbeddingRequest",
+    "EmbeddingResponse",
+    "GenerationRequest",
+    "GenerationResponse",
+    "RAGQueryRequest",
+    "RAGQueryResponse",
+    "RetrievalQuery",
+    "RetrievalResponse",
+    "RetrievedChunk",
+    "RetrievedDocument",
+    "from_search_results",
+]
 
 
-class RetrievalRequest(BaseModel):
-    """检索请求"""
+RetrievedDocument = RetrievedChunk
+"""检索命中片段（领域契约别名；单一事实来源 qingchuan_domain.schemas.retrieval.RetrievedChunk）。
 
-    query: str = Field(
-        ...,
-        min_length=1,
-        max_length=2000,
-        description="查询内容",
-    )
-    top_k: int = Field(
-        default=DEFAULT_TOP_K,
-        ge=1,
-        le=20,
-        description="返回文档数量",
-    )
-    similarity_threshold: float = Field(
-        default=DEFAULT_SIMILARITY_THRESHOLD,
-        ge=0.0,
-        le=1.0,
-        description="相似度阈值",
-    )
-    use_mmr: bool = Field(
-        default=False,
-        description="是否使用MMR算法",
-    )
-    mmr_lambda: float = Field(
-        default=DEFAULT_MMR_LAMBDA,
-        ge=0.0,
-        le=1.0,
-        description="MMR lambda参数",
-    )
-    metadata_filter: dict[str, Any] | None = Field(
-        default=None,
-        description="元数据过滤条件",
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "query": "RAG是什么",
-                "top_k": 5,
-                "similarity_threshold": 0.7,
-            }
-        },
-    )
+保留本别名保证 rag 既有导入路径不变；HTTP 与 MCP 响应均序列化为领域契约结构。
+"""
 
 
 class EmbeddingRequest(BaseModel):
@@ -205,61 +103,6 @@ class GenerationRequest(BaseModel):
     )
 
 
-RetrievedDocument = RetrievedChunk
-"""检索命中片段（领域契约别名；单一事实来源 qingchuan_domain.schemas.retrieval.RetrievedChunk）。
-
-保留本别名保证 rag 既有导入路径不变；HTTP 与 MCP 响应均序列化为领域契约结构。
-"""
-
-
-def from_search_results(results: list[dict[str, Any]]) -> list[RetrievedDocument]:
-    """将检索服务返回的原始结果转换为领域契约片段列表（HTTP 与 MCP 层共用）。
-
-    混合检索（向量 + BM25）产出的 score 量纲不一致：向量相似度 ∈ [0,1]，
-    BM25 原始分数无上界；领域契约约束 score ∈ [0,1]，这里统一收敛。
-    """
-    return [
-        RetrievedDocument(
-            chunk_id=doc["id"],
-            document_id=doc["metadata"].get("document_id", ""),
-            text=doc["text"],
-            score=max(0.0, min(1.0, float(doc.get("score", 0.0)))),
-            metadata=doc["metadata"],
-        )
-        for doc in results
-    ]
-
-
-class RAGQueryResponse(BaseModel):
-    """RAG查询响应"""
-
-    query: str = Field(..., description="查询内容")
-    answer: str = Field(..., description="生成的答案")
-    retrieved_docs: list[RetrievedDocument] = Field(
-        ...,
-        description="检索到的文档",
-    )
-    provider: str = Field(..., description="使用的LLM提供商")
-    model: str = Field(..., description="使用的模型")
-    tokens_used: int | None = Field(
-        default=None,
-        description="使用的token数",
-    )
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "query": "什么是RAG？",
-                "answer": "RAG是检索增强生成...",
-                "retrieved_docs": [],
-                "provider": "mimo",
-                "model": "mimo-v2.6-pro",
-                "tokens_used": 500,
-            }
-        },
-    )
-
-
 class EmbeddingResponse(BaseModel):
     """向量化响应"""
 
@@ -273,24 +116,6 @@ class EmbeddingResponse(BaseModel):
                 "embeddings": [[0.1, 0.2, 0.3]],
                 "dimension": 1024,
                 "model": "BAAI/bge-m3",
-            }
-        },
-    )
-
-
-class RetrievalResponse(BaseModel):
-    """检索响应"""
-
-    query: str = Field(..., description="查询内容")
-    documents: list[RetrievedDocument] = Field(..., description="检索到的文档")
-    total: int = Field(..., description="检索到的文档总数")
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "query": "RAG是什么",
-                "documents": [],
-                "total": 5,
             }
         },
     )

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""业务审计日志实体模型（参考汉江 x-HanJiang audit_logs 设计，适配观海）。
+"""业务审计日志实体模型（操作人支持应用标识而非用户主键）。
 
 观海无 int 用户体系，操作人为开放平台应用（AppId 字符串）：
 - operator_id:   调用方 AppId（如 gh_xxxx / app），而非用户表主键；

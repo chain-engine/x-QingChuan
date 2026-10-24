@@ -18,7 +18,13 @@ from __future__ import annotations
 from typing import Any
 
 from qingchuan_common.mcp import MCPClient, MCPClientError
-from qingchuan_domain.schemas.retrieval import RetrievedChunk
+from qingchuan_domain.constants.retrieval import DEFAULT_SIMILARITY_THRESHOLD
+from qingchuan_domain.ports.retrieval import RetrievalPort
+from qingchuan_domain.schemas.retrieval import (
+    RetrievalQuery,
+    RetrievalResponse,
+    RetrievedChunk,
+)
 
 from qingchuan_agent.core.config import settings
 from qingchuan_agent.core.logger import logger
@@ -44,8 +50,13 @@ def _to_retrieved_chunks(data: Any) -> list[RetrievedChunk]:
     return chunks
 
 
-class RagMCPClient:
-    """rag-service 的 MCP 工具客户端（retrieve_docs / rag_query）。"""
+class RagMCPClient(RetrievalPort):
+    """rag-service 的 MCP 工具客户端（retrieve_docs / rag_query）。
+
+    类型层面实现共享领域包 RetrievalPort 契约：编排层 / 下游组件只依赖
+    RetrievalPort（async retrieve），不感知 MCP 协议细节；rag_query 等
+    业务工具方法保留为同步形态供 LangGraph 同步节点直接调用。
+    """
 
     def __init__(self, mcp_url: str | None = None, timeout: float | None = None) -> None:
         rag_cfg = settings.rag
@@ -54,6 +65,38 @@ class RagMCPClient:
             timeout=timeout or rag_cfg.mcp_timeout_seconds,
         )
         logger.info(f"[RagMCP] MCP 客户端就绪：{self._client.url}")
+
+    # ------------------------------------------------------------------
+    # RetrievalPort 契约实现（异步，供依赖端口的调用方使用）
+    # ------------------------------------------------------------------
+
+    async def retrieve(self, query: RetrievalQuery) -> RetrievalResponse:
+        """按领域契约检索知识库中最相关的文档片段（仅检索，不生成）。
+
+        Args:
+            query: 领域检索请求（RetrievalQuery，含 scope 预留字段）。
+
+        Returns:
+            领域契约检索响应（RetrievalResponse：query / chunks / total）。
+        """
+        result = await self._client.call_tool(
+            "retrieve_docs",
+            {
+                "query": query.query,
+                "top_k": query.top_k,
+                # 领域契约中阈值可空（None=服务端默认）；落地时兜底为共享默认值
+                "similarity_threshold": (
+                    query.similarity_threshold
+                    if query.similarity_threshold is not None
+                    else DEFAULT_SIMILARITY_THRESHOLD
+                ),
+                "use_mmr": query.use_mmr,
+                "mmr_lambda": query.mmr_lambda,
+                "metadata_filter": query.metadata_filter,
+            },
+        )
+        chunks = _to_retrieved_chunks(result.get("data"))
+        return RetrievalResponse(query=query.query, chunks=chunks, total=len(chunks))
 
     # ------------------------------------------------------------------
     # 工具契约（与 rag-service mcp_server/tools.py 对齐）

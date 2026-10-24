@@ -3,6 +3,9 @@
 Document Schema Module
 
 文档管理相关接口的请求和响应模型
+
+文档状态 / 类型字段绑定本地枚举（DocStatus / DocType），
+入参模型开启 use_enum_values 以保持字符串语义兼容（入库值即枚举 mark）。
 """
 
 from datetime import datetime
@@ -10,11 +13,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from qingchuan_rag.constants import DocStatus, DocType
+
 
 class DocumentUploadRequest(BaseModel):
     """文档上传请求"""
 
-    file_type: str = Field(
+    file_type: DocType = Field(
         ...,
         description="文档类型",
         examples=["txt"],
@@ -25,6 +30,7 @@ class DocumentUploadRequest(BaseModel):
     )
 
     model_config = ConfigDict(
+        use_enum_values=True,
         json_schema_extra={
             "example": {
                 "file_type": "txt",
@@ -57,10 +63,11 @@ class DocumentQueryRequest(BaseModel):
 
     page: int = Field(default=1, ge=1, description="页码")
     page_size: int = Field(default=20, ge=1, le=100, description="每页记录数")
-    status: str | None = Field(default=None, description="文档状态")
-    file_type: str | None = Field(default=None, description="文档类型")
+    status: DocStatus | None = Field(default=None, description="文档状态")
+    file_type: DocType | None = Field(default=None, description="文档类型")
 
     model_config = ConfigDict(
+        use_enum_values=True,
         json_schema_extra={
             "example": {
                 "page": 1,
@@ -77,9 +84,9 @@ class DocumentInfo(BaseModel):
 
     document_id: str = Field(..., description="文档ID")
     file_name: str = Field(..., description="文件名")
-    file_type: str = Field(..., description="文件类型")
+    file_type: DocType = Field(..., description="文件类型")
     file_size: int = Field(..., description="文件大小（字节）")
-    status: str = Field(..., description="文档状态")
+    status: DocStatus = Field(..., description="文档状态")
     chunk_count: int = Field(..., description="分块数量")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
@@ -110,7 +117,7 @@ class DocumentUploadResponse(BaseModel):
 
     document_id: str = Field(..., description="文档ID")
     file_name: str = Field(..., description="文件名")
-    status: str = Field(..., description="处理状态")
+    status: DocStatus = Field(..., description="处理状态")
     message: str = Field(..., description="消息")
 
     model_config = ConfigDict(
@@ -129,7 +136,7 @@ class DocumentDeleteResponse(BaseModel):
     """文档删除响应"""
 
     document_id: str = Field(..., description="文档ID")
-    status: str = Field(..., description="删除状态")
+    status: DocStatus = Field(..., description="删除状态")
     message: str = Field(..., description="消息")
 
     model_config = ConfigDict(
@@ -170,7 +177,7 @@ class DocumentStatusResponse(BaseModel):
 
     document_id: str = Field(..., description="文档ID")
     file_name: str = Field(..., description="文件名")
-    status: str = Field(..., description="文档状态")
+    status: DocStatus = Field(..., description="文档状态")
     chunk_count: int = Field(..., description="分块数量")
     vector_count: int = Field(..., description="向量数量")
 

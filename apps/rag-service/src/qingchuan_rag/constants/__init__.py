@@ -43,7 +43,7 @@ from qingchuan_rag.constants.enums import (
     DocStatus,
     DocType,
     EntityType,
-    HeaderType,
+    HttpHeaders,
     HttpStatus,
     IntentType,
     LLMProviderType,
@@ -56,7 +56,7 @@ __all__ = [
     # HTTP Status
     "HttpStatus",
     # Headers
-    "HeaderType",
+    "HttpHeaders",
     # Document Status
     "DocStatus",
     # Document Types

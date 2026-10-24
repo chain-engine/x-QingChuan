@@ -53,6 +53,7 @@ def register_tools(
         use_mmr: bool = False,
         mmr_lambda: float = DEFAULT_MMR_LAMBDA,
         metadata_filter: dict[str, object] | None = None,
+        scope: str | None = None,
     ) -> dict[str, object]:
         """检索与查询最相关的知识片段，返回片段文本、相似度分数与元数据（仅检索，不生成）。
 
@@ -63,6 +64,7 @@ def register_tools(
             use_mmr: 是否使用 MMR 算法增加结果多样性。
             mmr_lambda: MMR 参数，0.0=多样性优先，1.0=相关性优先。
             metadata_filter: 元数据过滤条件，如 {"file_type": "pdf"}。
+            scope: 检索范围预留字段（对齐领域契约 RetrievalQuery.scope，服务端暂未消费）。
 
         Returns:
             稳定结构 {"items": [片段, ...]}，每项含 chunk_id/document_id/text/score/metadata。
