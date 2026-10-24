@@ -252,7 +252,7 @@ flowchart LR
 | LLM access | LangChain ChatOpenAI | OpenAI-compatible protocol; Mock when no key is set |
 | Task state machine | AgentTaskService | submit → route → execute → aggregate → persist / write back; retry / timeout / interrupt resume |
 | Business DB | SQLAlchemy 2 + PyMySQL (MySQL 8) | agent_tasks / agent_events (disabled by default) |
-| Config | pydantic-settings | Segmented prefixed config; invalid config blocks startup; production validation |
+| Config | Handwritten dataclass + env mapping (QINGCHUAN_AGENT_* prefix, repo-root .env) | Segmented prefixed config; invalid config blocks startup; production validation |
 | Logging | loguru | Colored console / file rotation (1 day / keep 7 days / zip compression) |
 | Engineering | uv + ruff + pre-commit + pytest | Workspace deps, static checks, tests |
 
@@ -266,7 +266,7 @@ flowchart LR
 | LLM access | langchain-core 0.3+ / langchain-openai 0.2+ (OpenAI-compatible protocol) |
 | MCP | mcp 2.3+ (client wrapped via qingchuan_common) |
 | Business database | MySQL 8.0 (SQLAlchemy 2 + PyMySQL; optional, disabled by default) |
-| Config management | pydantic-settings 2.5+ |
+| Config management | Handwritten dataclass + env mapping (QINGCHUAN_AGENT_* prefix) |
 | Logging | loguru 0.7+ |
 | Package management | uv (workspace members qingchuan-agent / qingchuan-domain / qingchuan-common) |
 | Engineering | ruff + pre-commit + pytest |
@@ -330,7 +330,6 @@ Data structure definitions (ORM entities):
 - MCP (Model Context Protocol): <https://modelcontextprotocol.io/>
 - SQLAlchemy: <https://www.sqlalchemy.org/>
 - PyMySQL: <https://pymysql.readthedocs.io/>
-- pydantic-settings: <https://docs.pydantic.dev/latest/concepts/pydantic_settings/>
 - loguru: <https://loguru.readthedocs.io/>
 - Docker: <https://docs.docker.com/>
 

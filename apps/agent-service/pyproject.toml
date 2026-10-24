@@ -8,7 +8,6 @@ dependencies = [
   "qingchuan-common",
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
-  "pydantic-settings>=2.5",
   # MCP 客户端经 packages/common 封装；agent 侧直接复用 qingchuan_common.mcp，
   # 版本约束与 rag-service 对齐（mcp>=2.3.0），保证 workspace 单一版本
   "mcp>=2.3.0,<3",

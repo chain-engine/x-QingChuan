@@ -249,7 +249,7 @@ flowchart LR
 | LLM 接入 | LangChain ChatOpenAI | OpenAI 兼容协议；未配 Key 走 Mock |
 | 任务状态机 | AgentTaskService | 提交 → 路由 → 执行 → 聚合 → 落库 / 回写；重试 / 超时 / 中断恢复 |
 | 业务库 | SQLAlchemy 2 + PyMySQL（MySQL 8） | agent_tasks / agent_events（默认关闭） |
-| 配置 | pydantic-settings | 分段带前缀配置；非法配置阻断启动；生产强制校验 |
+| 配置 | 手写 dataclass + env 映射（QINGCHUAN_AGENT_* 前缀，仓库根 .env） | 分段带前缀配置；非法配置阻断启动；生产强制校验 |
 | 日志 | loguru | 彩色控制台 / 文件轮转（1 天 / 保留 7 天 / zip 压缩） |
 | 工程化 | uv + ruff + pre-commit + pytest | 工作区依赖、静态检查、测试 |
 
@@ -263,7 +263,7 @@ flowchart LR
 | LLM 接入 | langchain-core 0.3+ / langchain-openai 0.2+（OpenAI 兼容协议） |
 | MCP | mcp 2.3+（客户端经 qingchuan_common 封装） |
 | 业务数据库 | MySQL 8.0（SQLAlchemy 2 + PyMySQL；可选，默认关闭） |
-| 配置管理 | pydantic-settings 2.5+ |
+| 配置管理 | 手写 dataclass + env 映射（QINGCHUAN_AGENT_* 前缀） |
 | 日志 | loguru 0.7+ |
 | 包管理 | uv（workspace 成员 qingchuan-agent / qingchuan-domain / qingchuan-common） |
 | 工程化 | ruff + pre-commit + pytest |
@@ -327,7 +327,6 @@ flowchart LR
 - MCP（Model Context Protocol）: <https://modelcontextprotocol.io/>
 - SQLAlchemy: <https://www.sqlalchemy.org/>
 - PyMySQL: <https://pymysql.readthedocs.io/>
-- pydantic-settings: <https://docs.pydantic.dev/latest/concepts/pydantic_settings/>
 - loguru: <https://loguru.readthedocs.io/>
 - Docker: <https://docs.docker.com/>
 
