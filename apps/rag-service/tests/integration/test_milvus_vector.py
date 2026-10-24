@@ -92,9 +92,7 @@ class TestMilvusVectorStoreIntegration:
         ]
         store.add(ids, embeddings, texts, metadatas)
 
-        results = store.search(
-            query_embedding=V_A, top_k=10, where={"document_id": "doc-b"}
-        )
+        results = store.search(query_embedding=V_A, top_k=10, where={"document_id": "doc-b"})
         assert [r["id"] for r in results] == ["b-1"]
         assert results[0]["metadata"]["document_id"] == "doc-b"
 

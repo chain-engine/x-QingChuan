@@ -63,9 +63,7 @@ async def rag_query(
 
         # 归一为领域契约 RAGQueryResponse（与 MCP rag_query 工具同一结构）
         raw_docs = result.get("retrieved_docs", []) or []
-        normalized_docs = (
-            from_search_results(raw_docs) if isinstance(raw_docs, list) else []
-        )
+        normalized_docs = from_search_results(raw_docs) if isinstance(raw_docs, list) else []
         data = RAGQueryResponse(
             query=body.query,
             answer=result.get("answer", ""),

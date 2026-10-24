@@ -74,17 +74,21 @@ class RAGQueryRequest(BaseModel):
         description="生成回答的最大 token 数",
     )
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "query": "什么是 RAG 技术？它解决了什么问题？",
-        "top_k": 5,
-        "similarity_threshold": 0.7,
-        "use_mmr": False,
-        "mmr_lambda": 0.5,
-        "metadata_filter": {"file_type": "pdf"},
-        "provider": None,
-        "temperature": 0.3,
-        "max_tokens": 2000,
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "query": "什么是 RAG 技术？它解决了什么问题？",
+                "top_k": 5,
+                "similarity_threshold": 0.7,
+                "use_mmr": False,
+                "mmr_lambda": 0.5,
+                "metadata_filter": {"file_type": "pdf"},
+                "provider": None,
+                "temperature": 0.3,
+                "max_tokens": 2000,
+            }
+        }
+    )
 
 
 class RAGQueryResponse(BaseModel):
@@ -99,14 +103,18 @@ class RAGQueryResponse(BaseModel):
     model: str = Field(description="使用的模型")
     tokens_used: int | None = Field(default=None, description="使用的 token 数")
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "query": "什么是 RAG？",
-        "answer": "RAG 是检索增强生成...",
-        "retrieved_docs": [],
-        "provider": "mimo",
-        "model": "mimo-v2.6-pro",
-        "tokens_used": 500,
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "query": "什么是 RAG？",
+                "answer": "RAG 是检索增强生成...",
+                "retrieved_docs": [],
+                "provider": "mimo",
+                "model": "mimo-v2.6-pro",
+                "tokens_used": 500,
+            }
+        }
+    )
 
 
 def from_search_results(results: list[dict[str, Any]]) -> list[RetrievedChunk]:
