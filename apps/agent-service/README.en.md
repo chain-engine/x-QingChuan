@@ -307,6 +307,7 @@ The service enables **Swagger interactive docs / ReDoc read-only docs / OpenAPI 
 | Storage | Purpose | Config parameters | Notes |
 | --- | --- | --- | --- |
 | MySQL 8.0 | Agent task / collaboration event persistence | `QINGCHUAN_AGENT_DATABASE_ENABLED` / `QINGCHUAN_AGENT_DATABASE_HOST` / `PORT` / `USER` / `PASSWORD` / `DATABASE` | Disabled by default, starts without a DB; auto-creates tables on first start when enabled |
+| Redis 7 | agent checkpoint (resume) / event bus (cross-process pub/sub) | `QINGCHUAN_AGENT_REDIS_ENABLED` / `HOST` / `PORT` / `DB` / `PASSWORD`, checkpoint via `QINGCHUAN_AGENT_AGENT_CHECKPOINT=redis` | Required in production (checkpoint must be redis); falls back to in-memory when connection fails; checkpoint and event bus share one instance |
 | Log files | loguru file rotation | `QINGCHUAN_AGENT_LOGGING_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days / zip compression |
 
 Data structure definitions (ORM entities):

@@ -307,6 +307,7 @@ flowchart LR
 | 存储 | 用途 | 配置参数 | 备注 |
 | --- | --- | --- | --- |
 | MySQL 8.0 | Agent 任务 / 协作事件持久化 | `QINGCHUAN_AGENT_DATABASE_ENABLED` / `QINGCHUAN_AGENT_DATABASE_HOST` / `PORT` / `USER` / `PASSWORD` / `DATABASE` | 默认关闭，可无库启动；启用后首次启动自动建表 |
+| Redis 7 | agent checkpoint（断点续跑）/ 事件总线（跨进程广播） | `QINGCHUAN_AGENT_REDIS_ENABLED` / `HOST` / `PORT` / `DB` / `PASSWORD`、`QINGCHUAN_AGENT_AGENT_CHECKPOINT=redis` | 生产强制（checkpoint 必须 redis）；连接失败降级内存实现；checkpoint 与事件总线共用同一实例 |
 | 日志文件 | loguru 文件轮转 | `QINGCHUAN_AGENT_LOGGING_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | 轮转 1 天 / 保留 7 天 / zip 压缩 |
 
 数据结构定义（ORM 实体）：
