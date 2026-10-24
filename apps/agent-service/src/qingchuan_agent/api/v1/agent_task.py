@@ -2,9 +2,10 @@
 """Agent 编排管理接口（晴川 x-QingChuan，对齐北辰 api/v1/agent_task）。
 
     GET    /agents/specs       Agent 注册表列表
-    POST   /tasks              提交 Agent 任务
+    POST   /tasks              提交 Agent 任务（异步化：入队即返回，结果经轮询/SSE获取）
     GET    /tasks              任务列表（可按状态/类型过滤）
     GET    /tasks/{task_id}    任务详情
+    GET    /tasks/{task_id}/stream   任务状态流（SSE，实时推送 running→终态）
     POST   /tasks/{task_id}/resume  人工接管恢复（interrupt/resume）
     GET    /events             协作事件列表
     GET    /events/{event_id}  协作事件详情
@@ -14,16 +15,29 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from qingchuan_agent.agents.registry import agent_registry
 from qingchuan_agent.api.dependencies import get_task_service
 from qingchuan_agent.api.response import success_response
+from qingchuan_agent.constants import TaskStatus
+from qingchuan_agent.infras.event_bus import EventMessage, get_event_bus
 from qingchuan_agent.schemas.agent import AgentTaskCreate, AgentTaskResumeIn
 from qingchuan_agent.services.agent_task_service import AgentTaskService
+from qingchuan_agent.services.task_worker import TASK_STATE_EVENT
 
 router = APIRouter(tags=["Agent 任务管理"])
+
+# 终态集合（SSE 流到这些状态即关闭连接）
+_TERMINAL_STATUSES = {
+    TaskStatus.SUCCESS.mark,
+    TaskStatus.FAILED.mark,
+    TaskStatus.WAITING_HUMAN.mark,
+}
 
 
 @router.get("/agents/specs", summary="Agent 注册表列表")
@@ -101,6 +115,62 @@ async def get_task(
     """Agent 任务详情。"""
     task = service.get_task(task_id)
     return success_response(data=_task_to_dict(task), request=request)
+
+
+@router.get("/tasks/{task_id}/stream", summary="Agent 任务状态流（SSE）")
+async def stream_task(
+    task_id: int,
+    request: Request,
+    service: AgentTaskService = Depends(get_task_service),
+) -> StreamingResponse:
+    """Server-Sent Events：实时推送任务状态（task.state），终态（success/failed/
+    waiting_human）后自动关闭。
+
+    - 已终态任务：立即推终态快照并结束（不挂连接）
+    - 运行中任务：订阅 EventBus，过滤本任务的 task.state 事件逐条推送
+    - 客户端断开 / 终态到达均正常收尾（注销订阅，不泄漏回调）
+    """
+    task = service.get_task(task_id)  # 不存在则 404
+
+    async def _event_stream():
+        bus = get_event_bus()
+        queue: asyncio.Queue[EventMessage] = asyncio.Queue()
+
+        def _snapshot(status: str) -> dict:
+            return {"task_id": task_id, "status": status, "snapshot": True}
+
+        async def _callback(message: EventMessage) -> None:
+            if message.event_type == TASK_STATE_EVENT and message.payload.get("task_id") == task_id:
+                queue.put_nowait(message)
+
+        # 先推当前状态快照（轮询兜底：事件可能发生在连接建立前）
+        yield f"data: {json.dumps(_snapshot(task.status), ensure_ascii=False)}\n\n"
+        if task.status in _TERMINAL_STATUSES:
+            return
+
+        await bus.subscribe(_callback)
+        try:
+            while True:
+                message = await queue.get()
+                payload = dict(message.payload)
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                if payload.get("status") in _TERMINAL_STATUSES:
+                    break
+        except asyncio.CancelledError:
+            # 客户端断开：正常退出，不视为错误
+            pass
+        finally:
+            await bus.unsubscribe(_callback)
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲，逐事件透传
+        },
+    )
 
 
 @router.post("/tasks/{task_id}/resume", summary="恢复人工接管 Agent 任务")

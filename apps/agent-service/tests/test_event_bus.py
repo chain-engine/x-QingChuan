@@ -56,6 +56,24 @@ async def test_in_memory_subscriber_error_not_blocking():
     assert received == ["ok"]
 
 
+@pytest.mark.asyncio
+async def test_in_memory_unsubscribe():
+    """InMemory：unsubscribe 后回调不再收到事件（SSE 断开清理场景）。"""
+    bus = InMemoryEventBus()
+    received: list[str] = []
+
+    async def callback(message: EventMessage) -> None:
+        received.append(message.event_type)
+
+    await bus.subscribe(callback)
+    await bus.publish(EventMessage(event_type="before"))
+    assert received == ["before"]
+
+    await bus.unsubscribe(callback)
+    await bus.publish(EventMessage(event_type="after"))
+    assert received == ["before"]  # 注销后不再追加
+
+
 def test_decode_message_roundtrip():
     """消息反序列化：合法 JSON → EventMessage；脏数据丢弃。"""
     raw = json.dumps(

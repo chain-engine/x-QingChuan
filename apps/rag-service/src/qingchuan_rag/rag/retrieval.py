@@ -49,6 +49,7 @@ class Retrieval:
         embedding_model: BGEEmbeddingModel | None = None,
         default_top_k: int = 5,
         default_threshold: float = 0.7,
+        rrf_k: int = 60,
     ):
         """
         初始化检索器
@@ -59,12 +60,14 @@ class Retrieval:
             embedding_model: Embedding 模型实例（可选）
             default_top_k: 默认召回数量
             default_threshold: 默认相似度阈值
+            rrf_k: RRF 融合常数（默认 60；网格调优后可整体调整默认值）
         """
         self._vector_repo = vector_repo
         self._bm25_repo = bm25_repo
         self._embedding_model = embedding_model
         self._default_top_k = default_top_k
         self._default_threshold = default_threshold
+        self._rrf_k = rrf_k
         self._initialized = False
 
         # ── 构建检索流水线 ──────────────────────────
@@ -100,7 +103,7 @@ class Retrieval:
         # Stage 3: 排序筛选 — RRF 融合多路召回结果后，再做 MMR 多样性排序
         # 顺序很重要：RRF 先融合 → MMR 后重排（确保多样性的基础上融合）
         reranking_providers = [
-            RRFReranker(k=60),  # 融合多路召回（向量 + BM25）的结果
+            RRFReranker(k=self._rrf_k),  # 融合多路召回（向量 + BM25）的结果
             MMRReranker(distance_type=DistanceType.COSINE),  # 多样性重排
         ]
         filter_providers = [
@@ -157,6 +160,7 @@ class Retrieval:
         similarity_threshold: float = 0.7,
         use_mmr: bool = False,
         mmr_lambda: float = 0.5,
+        rrf_k: int | None = None,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """
@@ -168,6 +172,7 @@ class Retrieval:
             similarity_threshold: 相似度阈值
             use_mmr: 是否使用 MMR 多样性排序
             mmr_lambda: MMR 参数
+            rrf_k: RRF 融合常数（None=使用装配时的默认 60）
             metadata_filter: 元数据过滤条件
 
         Returns:
@@ -182,6 +187,7 @@ class Retrieval:
             metadata_filter=metadata_filter,
             use_mmr=use_mmr,
             mmr_lambda=mmr_lambda,
+            rrf_k=rrf_k,
         )
 
         formatted = []

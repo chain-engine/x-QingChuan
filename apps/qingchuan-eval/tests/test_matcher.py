@@ -1,6 +1,11 @@
 """gold 命中判定单元测试。"""
 
-from qingchuan_eval.matcher import gold_hit, match_retrieved, normalize_text
+from qingchuan_eval.matcher import (
+    gold_hit,
+    match_retrieved,
+    match_retrieved_detailed,
+    normalize_text,
+)
 from qingchuan_eval.schema import GoldChunkRef
 
 
@@ -59,3 +64,19 @@ class TestMatchRetrieved:
         hits, matched = match_retrieved(retrieved, gold)
         assert hits == [True]
         assert matched == 2
+
+    def test_detailed_refs_per_chunk(self):
+        gold = [
+            GoldChunkRef(doc="d1", snippet="按月领取基本养老金"),
+            GoldChunkRef(doc="d2", snippet="缴费基数申报"),
+            GoldChunkRef(doc="d3", snippet="失业金领取期限"),
+        ]
+        retrieved = [
+            {"text": "缴费基数申报指南全文。", "metadata": {}},
+            {"text": "按月领取基本养老金的条件。", "metadata": {}},
+            {"text": "无关内容。", "metadata": {}},
+        ]
+        hits, matched, refs = match_retrieved_detailed(retrieved, gold)
+        assert hits == [True, True, False]
+        assert matched == 2
+        assert refs == [{1}, {0}, set()]

@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -63,9 +64,34 @@ async def lifespan(app: FastAPI):
 
     get_event_bus()
 
+    # 6. 任务队列 + Worker（Redis Stream 异步执行；Redis 不可用时服务走同步回退）
+    #    消费循环独立协程运行；Shutdown 时 cancel 并等待退出
+    from qingchuan_agent.infras.task_stream import get_task_queue
+
+    worker_task = None
+    task_queue = get_task_queue()
+    if task_queue is not None:
+        from qingchuan_agent.infras.database import get_cached_database_provider
+        from qingchuan_agent.services.task_worker import TaskWorker
+
+        await task_queue.ensure_group()
+        worker = TaskWorker(
+            queue=task_queue,
+            session_factory=get_cached_database_provider().get_session_factory(),
+        )
+        worker_task = asyncio.create_task(worker.run_forever())
+        logger.info(f"TaskWorker 消费协程已启动：{worker_task.get_name()}")
+
     yield
 
     # 关闭清理
+    if worker_task is not None:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            logger.info("TaskWorker 消费协程已退出")
+
     from qingchuan_agent.infras.event_bus import shutdown_event_bus
 
     await shutdown_event_bus()

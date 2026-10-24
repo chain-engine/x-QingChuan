@@ -1,0 +1,30 @@
+{"id": "content-001", "kind": "explicit", "task_type": "content", "query": "帮我写一篇关于延迟退休政策解读的公众号文章", "expected_agent": "content", "payload": {"query": "帮我写一篇关于延迟退休政策解读的公众号文章"}}
+{"id": "content-002", "kind": "explicit", "task_type": "content", "query": "策划下周的社保知识科普图文选题", "expected_agent": "content", "payload": {"query": "策划下周的社保知识科普图文选题"}}
+{"id": "content-003", "kind": "explicit", "task_type": "content", "query": "撰写一段养老金资格认证的短视频脚本", "expected_agent": "content", "payload": {"query": "撰写一段养老金资格认证的短视频脚本"}}
+{"id": "content-004", "kind": "explicit", "task_type": "content", "query": "生成医保新政策宣传海报文案", "expected_agent": "content", "payload": {"query": "生成医保新政策宣传海报文案"}}
+{"id": "cs-001", "kind": "explicit", "task_type": "customer_service", "query": "我在湖北交了15年养老保险，退休后每月能领多少养老金？", "expected_agent": "customer_service", "payload": {"message": "我在湖北交了15年养老保险，退休后每月能领多少养老金？"}}
+{"id": "cs-002", "kind": "explicit", "task_type": "customer_service", "query": "医保断缴三个月会有什么影响？", "expected_agent": "customer_service", "payload": {"question": "医保断缴三个月会有什么影响？"}}
+{"id": "cs-003", "kind": "explicit", "task_type": "customer_service", "query": "社保卡丢失了怎么补办？", "expected_agent": "customer_service", "payload": {"query": "社保卡丢失了怎么补办？"}}
+{"id": "cs-004", "kind": "explicit", "task_type": "customer_service", "query": "灵活就业人员怎么参加职工养老保险？", "expected_agent": "customer_service", "payload": {"query": "灵活就业人员怎么参加职工养老保险？"}}
+{"id": "sec-001", "kind": "explicit", "task_type": "security", "query": "扫描这批参保人查询日志，找出疑似越权访问的告警", "expected_agent": "security", "payload": {"query": "扫描这批参保人查询日志，找出疑似越权访问的告警"}}
+{"id": "sec-002", "kind": "explicit", "task_type": "security", "query": "分析最近一周登录失败记录，识别暴力破解风险", "expected_agent": "security", "payload": {"query": "分析最近一周登录失败记录，识别暴力破解风险"}}
+{"id": "sec-003", "kind": "explicit", "task_type": "security", "query": "对社保经办系统做一次风险点排查并输出告警清单", "expected_agent": "security", "payload": {"query": "对社保经办系统做一次风险点排查并输出告警清单"}}
+{"id": "sec-004", "kind": "explicit", "task_type": "security", "query": "检查数据导出接口是否存在敏感信息泄露风险", "expected_agent": "security", "payload": {"query": "检查数据导出接口是否存在敏感信息泄露风险"}}
+{"id": "da-001", "kind": "explicit", "task_type": "data_analysis", "query": "统计今年全省养老金发放金额的月度趋势并出报告", "expected_agent": "data_analysis", "payload": {"query": "统计今年全省养老金发放金额的月度趋势并出报告"}}
+{"id": "da-002", "kind": "explicit", "task_type": "data_analysis", "query": "对比各地市医保基金结余情况，输出分析结论", "expected_agent": "data_analysis", "payload": {"query": "对比各地市医保基金结余情况，输出分析结论"}}
+{"id": "da-003", "kind": "explicit", "task_type": "data_analysis", "query": "分析参保人数增长与缴费基数调整的关系", "expected_agent": "data_analysis", "payload": {"query": "分析参保人数增长与缴费基数调整的关系"}}
+{"id": "da-004", "kind": "explicit", "task_type": "data_analysis", "query": "取数：2025年全省失业保险基金收支明细，做一份分析报告", "expected_agent": "data_analysis", "payload": {"query": "取数：2025年全省失业保险基金收支明细，做一份分析报告"}}
+{"id": "dm-001", "kind": "explicit", "task_type": "data_monitor", "query": "盯着参保人信息同步任务，跑完异常就通知我", "expected_agent": "data_monitor", "payload": {"query": "盯着参保人信息同步任务，跑完异常就通知我"}}
+{"id": "dm-002", "kind": "explicit", "task_type": "data_monitor", "query": "定时检查医保报销接口可用性，挂了告警", "expected_agent": "data_monitor", "payload": {"query": "定时检查医保报销接口可用性，挂了告警"}}
+{"id": "dm-003", "kind": "explicit", "task_type": "data_monitor", "query": "监控每天同步的社保数据量是否达标并出判定", "expected_agent": "data_monitor", "payload": {"query": "监控每天同步的社保数据量是否达标并出判定"}}
+{"id": "dm-004", "kind": "explicit", "task_type": "data_monitor", "query": "每小时查一次基金预警指标，超阈值发通知", "expected_agent": "data_monitor", "payload": {"query": "每小时查一次基金预警指标，超阈值发通知"}}
+{"id": "neg-001", "kind": "negative", "task_type": "hrss_report", "query": "生成人社年度报告", "expected_agent": null, "payload": {}}
+{"id": "neg-002", "kind": "negative", "task_type": "billing", "query": "账单查询", "expected_agent": null, "payload": {}}
+{"id": "neg-003", "kind": "negative", "task_type": "unknown_agent", "query": "随便一个未注册类型", "expected_agent": null, "payload": {}}
+{"id": "nat-001", "kind": "natural", "query": "帮我写一篇养老金上调政策的解读文章，适合公众号发布", "expected_agent": "content", "payload": {"query": "帮我写一篇养老金上调政策的解读文章，适合公众号发布"}}
+{"id": "nat-002", "kind": "natural", "query": "武汉的职工医保个人账户每月划入多少？", "expected_agent": "customer_service", "payload": {"query": "武汉的职工医保个人账户每月划入多少？"}}
+{"id": "nat-003", "kind": "natural", "query": "查一下最近系统里有没有异常登录，有就告警", "expected_agent": "security", "payload": {"query": "查一下最近系统里有没有异常登录，有就告警"}}
+{"id": "nat-004", "kind": "natural", "query": "把全省工伤保险赔付数据的季度走势分析一下", "expected_agent": "data_analysis", "payload": {"query": "把全省工伤保险赔付数据的季度走势分析一下"}}
+{"id": "nat-005", "kind": "natural", "query": "每天早八点检查数据同步任务状态，失败提醒我", "expected_agent": "data_monitor", "payload": {"query": "每天早八点检查数据同步任务状态，失败提醒我"}}
+{"id": "nat-006", "kind": "natural", "query": "写一条短视频脚本介绍延迟退休年龄政策", "expected_agent": "content", "payload": {"query": "写一条短视频脚本介绍延迟退休年龄政策"}}
+{"id": "nat-007", "kind": "natural", "query": "失业金领取条件是什么？我在武汉工作", "expected_agent": "customer_service", "payload": {"query": "失业金领取条件是什么？我在武汉工作"}}

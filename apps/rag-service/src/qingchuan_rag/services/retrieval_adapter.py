@@ -37,6 +37,7 @@ class RetrievalAdapter(RetrievalPort):
             ),
             use_mmr=query.use_mmr,
             mmr_lambda=query.mmr_lambda,
+            rrf_k=query.rrf_k,
             metadata_filter=query.metadata_filter,
         )
         chunks = [

@@ -54,6 +54,16 @@ def test_checkpointer_redis_real(monkeypatch):
         available = asyncio.run(init_redis())
         if not available:
             pytest.skip("本地 Redis 不可用，跳过 RedisSaver 集成测试")
+        from qingchuan_agent.infras.redis import get_sync_redis_client
+
+        # RedisSaver 依赖 RediSearch 模块（FT.* 命令）；无该模块时 runtime 按设计
+        # 降级 MemorySaver，断言无意义，跳过（本机 Docker Redis / CI 官方镜像均无）。
+        try:
+            modules = get_sync_redis_client().execute_command("MODULE LIST")
+        except Exception:
+            modules = []
+        if not any(b"search" in (m[0] if isinstance(m, (list, tuple)) else b"") for m in modules):
+            pytest.skip("Redis 缺少 RediSearch 模块，跳过 RedisSaver 集成测试")
         from langgraph.checkpoint.redis import RedisSaver
 
         runtime = AgentRuntime()

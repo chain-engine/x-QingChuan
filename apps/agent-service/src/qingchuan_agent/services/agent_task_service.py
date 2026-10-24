@@ -2,11 +2,17 @@
 """Agent 任务服务（晴川 x-QingChuan 业务层，对齐北辰 services/agent_task_service）。
 
 职责边界（api → services → repositories 单向）：
-    - 任务提交：落库（pending）→ 调 AgentRuntime 派发执行 → 回写状态/结果 → 事件落库
+    - 任务提交：落库（running）→ Redis Stream 入队（异步执行，接口立即返回）/
+      无 Redis 时同步回退 → worker 执行并回写状态/结果 → 事件落库
     - 任务查询：列表 / 详情（管理后台）
-    - 人工接管：interrupt 断点 → resume 恢复 → 回写人工决策
+    - 人工接管：interrupt 断点 → resume 恢复（走同一任务队列）→ 回写人工决策
     - 事件查询：协作事件分页（审计面板）
     - 不读取 Request 对象；HTTP 参数由 api 层解析后传入
+
+执行模型（用户已拍板「异步化」）：
+    Redis 可用：提交只落库 + XADD 入队即返回；TaskWorker（lifespan 启动）消费执行，
+    状态/结果由 worker 回写，SSE / 轮询 GET /tasks/{id} 获取结果。
+    Redis 不可用（开发/降级）：保留线程池同步执行回退，行为与旧版一致。
 
 说明：真正的"编排执行"在 AgentRuntime（图编译 / invoke / resume），
 本服务是任务门面：负责任务生命周期管理（提交、恢复、查询），不承载图编排。
@@ -14,7 +20,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -25,17 +30,22 @@ from qingchuan_agent.constants import TaskStatus
 from qingchuan_agent.core.config import settings
 from qingchuan_agent.core.exceptions import NotFoundError, ValidationError
 from qingchuan_agent.core.logger import logger
-from qingchuan_agent.infras.event_bus import EventBus, EventMessage, get_event_bus
+from qingchuan_agent.infras.event_bus import EventBus, get_event_bus
+from qingchuan_agent.infras.task_stream import TaskStreamQueue, get_task_queue
 from qingchuan_agent.models.entities.agent_event import AgentEvent
 from qingchuan_agent.models.entities.agent_task import AgentTask
 from qingchuan_agent.repositories.agent_event_repository import AgentEventRepository
 from qingchuan_agent.repositories.agent_task_repository import AgentTaskRepository
+from qingchuan_agent.services.task_execution import (
+    invoke_and_finalize,
+    resume_and_finalize,
+)
 
 
 class AgentTaskService:
     """Agent 任务服务：任务全生命周期管理（提交 / 恢复 / 查询 / 事件查询）。
 
-    依赖（runtime / event_bus）通过构造函数注入，默认走进程级工厂单例；
+    依赖（runtime / event_bus / queue）通过构造函数注入，默认走进程级工厂单例；
     测试或多实现切换时可传入 Mock/替身，不再硬绑全局状态。
     """
 
@@ -44,12 +54,20 @@ class AgentTaskService:
         session: Session,
         runtime: AgentRuntime | None = None,
         event_bus: EventBus | None = None,
+        queue: TaskStreamQueue | None = None,
     ) -> None:
         self._session = session
         self._task_repo = AgentTaskRepository(session)
         self._event_repo = AgentEventRepository(session)
         self._runtime: AgentRuntime = runtime or get_agent_runtime()
         self._event_bus: EventBus = event_bus or get_event_bus()
+        # queue 缺省走全局单例（Redis 可用时即异步执行；不可用返回 None 走同步回退）
+        self._queue: TaskStreamQueue | None = queue or get_task_queue()
+
+    @property
+    def _queue_enabled(self) -> bool:
+        """任务队列是否启用（Redis 可用 + 队列已装配）。"""
+        return self._queue is not None
 
     # ----------------------------------------------------------
     # 任务提交
@@ -61,7 +79,7 @@ class AgentTaskService:
         payload: dict[str, Any],
         timeout_at: datetime | None = None,
     ) -> AgentTask:
-        """提交一个 Agent 任务并同步执行（骨架阶段同步执行）。
+        """提交一个 Agent 任务（Redis 可用时异步入队，接口立即返回）。
 
         Args:
             task_type: 任务类型（AgentType.mark，如 "customer_service"）；可为 None，
@@ -70,7 +88,8 @@ class AgentTaskService:
             timeout_at: 超时时间点（缺省按配置 agent.task_timeout_seconds）
 
         Returns:
-            回写执行结果后的 AgentTask（含 thread_id / status / result）
+            Redis 可用：已落库入队的 AgentTask（status=running，worker 异步执行后回写）；
+            Redis 不可用：同步执行并回写结果后的 AgentTask（开发降级路径）。
 
         事件双写契约：编排产生的事件同时「落库留痕 + publish 事件总线」，
         publish 失败不影响主流程（仅记日志），总线作为 Agent 间协作广播通道。
@@ -81,9 +100,10 @@ class AgentTaskService:
         if task_type and not agent_registry.has(task_type):
             raise ValidationError(f"任务类型未注册 Agent：{task_type}")
 
-        # 2. 落库 pending（先持久化，获取任务 ID 作为审计主键）。
+        # 2. 落库 running（先持久化，获取任务 ID 作为审计主键）。
         #    task_type 非空列不可空，动态路由任务先用 "auto" 占位，
-        #    实际派发 Agent 回写 assignee_agent。
+        #    实际派发 Agent 回写 assignee_agent。thread_id 入队前预生成，
+        #    供 resume 校验与 checkpoint 定位使用。
         task = AgentTask(
             task_type=task_type or "auto",
             payload=payload,
@@ -94,71 +114,38 @@ class AgentTaskService:
         )
         self._task_repo.add(task)
         self._task_repo.commit()
+        thread_id = f"task:{task.id}"
+        task.thread_id = thread_id
         logger.info(f"[TaskService] 任务已落库：id={task.id} type={task_type}")
 
-        # 3. 派发执行（同步 LangGraph invoke 放线程池，避免阻塞事件循环；
-        #    invoke 内部不触碰请求级 SQLAlchemy session，线程安全）
-        thread_id = f"task:{task.id}"
-        loop = asyncio.get_running_loop()
-        final_state = await loop.run_in_executor(
-            None,
-            lambda: self._runtime.invoke_task(
-                task_type=task_type,
-                payload=payload,
-                thread_id=thread_id,
-                task_id=task.id,
-            ),
+        # 3. 派发执行：Redis 可用 → 入队异步执行；不可用 → 线程池同步回退
+        if self._queue_enabled:
+            await self._queue.enqueue(
+                {
+                    "action": "submit",
+                    "task_id": task.id,
+                    "task_type": task_type or "auto",
+                    "thread_id": thread_id,
+                    "payload": payload,
+                }
+            )
+            self._task_repo.commit()
+            logger.info(f"[TaskService] 任务已入队：id={task.id}（异步执行）")
+            return task
+
+        logger.info(f"[TaskService] Redis 不可用，任务同步执行（降级）：id={task.id}")
+        await invoke_and_finalize(
+            runtime=self._runtime,
+            task_repo=self._task_repo,
+            event_repo=self._event_repo,
+            event_bus=self._event_bus,
+            task=task,
+            task_type=task_type,
+            payload=payload,
+            thread_id=thread_id,
         )
-
-        # 4. 回写执行结果
-        self._apply_final_state(task, final_state, thread_id)
-
-        # 5. 事件双写：落库留痕 + 发布事件总线（Agent 协作广播）
-        await self._persist_and_publish_events(final_state)
-
         self._task_repo.commit()
         return task
-
-    async def _persist_and_publish_events(self, final_state: dict[str, Any]) -> None:
-        """事件双写：agent_events 落库 + EventBus publish（失败仅记日志不阻断）。"""
-        for event in final_state.get("events", []):
-            self._event_repo.add(
-                AgentEvent(
-                    event_type=event.get("type", "unknown"),
-                    source_agent=event.get("source"),
-                    target_agent=event.get("target"),
-                    payload=event.get("payload"),
-                    status="recorded",
-                )
-            )
-            try:
-                await self._event_bus.publish(
-                    EventMessage(
-                        event_type=event.get("type", "unknown"),
-                        payload=event.get("payload") or {},
-                        source_agent=event.get("source"),
-                        target_agent=event.get("target"),
-                    )
-                )
-            except Exception as exc:  # 总线发布失败不影响主流程
-                logger.exception(f"[TaskService] 事件发布失败（已落库留痕）：{exc}")
-
-    def _apply_final_state(
-        self, task: AgentTask, final_state: dict[str, Any], thread_id: str
-    ) -> None:
-        """把编排图最终状态回写到任务实体。"""
-        task.thread_id = thread_id
-        task.status = final_state.get("status", TaskStatus.SUCCESS.mark)
-        task.assignee_agent = final_state.get("target_agent")  # 路由结果回写（Agent 归属可查）
-        task.result = final_state.get("result") or final_state
-        task.error_message = final_state.get("error")
-        task.timeout_at = None
-        if final_state.get("status") == TaskStatus.FAILED.mark:
-            task.retry_count += 1
-        logger.info(
-            f"[TaskService] 任务结束：id={task.id} status={task.status} "
-            f"assignee={task.assignee_agent}"
-        )
 
     # ----------------------------------------------------------
     # 任务查询
@@ -205,18 +192,45 @@ class AgentTaskService:
         """恢复被 interrupt 暂停的任务（人工决策 approve/reject/adjust）。
 
         恢复后同样执行事件双写（人工决策产生的后续事件落库 + 广播）。
+        Redis 可用时入队由 worker 续跑；不可用时同步执行回退。
         """
         task = self.get_task(task_id)
         if not task.thread_id:
             raise ValidationError("任务无线程 ID，无法恢复（可能未执行或已完成）")
+        from qingchuan_agent.constants import HumanDecision
+
+        valid_decisions = [item.mark for item in HumanDecision]
+        if decision not in valid_decisions:
+            raise ValidationError(
+                f"非法人工决策：{decision!r}（可选：{', '.join(valid_decisions)}）"
+            )
         update = {"decision": decision, "remark": remark, "extra": extra or {}}
-        loop = asyncio.get_running_loop()
-        final_state = await loop.run_in_executor(
-            None,
-            lambda: self._runtime.resume_task(task.thread_id, update),
+
+        if self._queue_enabled:
+            task.status = TaskStatus.RUNNING.mark
+            await self._queue.enqueue(
+                {
+                    "action": "resume",
+                    "task_id": task.id,
+                    "thread_id": task.thread_id,
+                    "decision": decision,
+                    "remark": remark or "",
+                    "extra": extra or {},
+                }
+            )
+            self._task_repo.commit()
+            logger.info(f"[TaskService] 人工接管已入队：id={task.id} decision={decision}")
+            return task
+
+        logger.info(f"[TaskService] Redis 不可用，人工接管同步执行（降级）：id={task.id}")
+        await resume_and_finalize(
+            runtime=self._runtime,
+            task_repo=self._task_repo,
+            event_repo=self._event_repo,
+            event_bus=self._event_bus,
+            task=task,
+            update=update,
         )
-        self._apply_final_state(task, final_state, task.thread_id)
-        await self._persist_and_publish_events(final_state)
         self._task_repo.commit()
         return task
 

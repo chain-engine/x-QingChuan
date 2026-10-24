@@ -18,6 +18,10 @@ def print_summary(report: EvalReport) -> None:
     print(f"  MRR     : {fmt(agg.mrr)}")
     print(f"  prec@3  : {fmt(agg.precision_at_3)}")
     print(f"  recall  : {fmt(agg.recall)}")
+    print(
+        f"  recall@1/3/5/10: {fmt(agg.recall_at_1)} / {fmt(agg.recall_at_3)} / "
+        f"{fmt(agg.recall_at_5)} / {fmt(agg.recall_at_10)}"
+    )
     if report.config.mode == "full":
         print(f"  答案包含率: {fmt(agg.answer_containment)}")
         print(f"  答案 F1   : {fmt(agg.answer_f1)}")

@@ -179,6 +179,7 @@ class RetrievalPipeline:
         metadata_filter: dict[str, Any] | None = None,
         use_mmr: bool = False,
         mmr_lambda: float = 0.5,
+        rrf_k: int | None = None,
         context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """
@@ -191,6 +192,7 @@ class RetrievalPipeline:
             metadata_filter: 元数据过滤条件
             use_mmr: 是否使用 MMR 多样性排序
             mmr_lambda: MMR 参数
+            rrf_k: RRF 融合常数（None=使用装配时的默认 60；网格调优 / 请求级透传用）
             context: 额外上下文（如对话历史）
 
         Returns:
@@ -264,6 +266,7 @@ class RetrievalPipeline:
                 effective_top_k=effective_top_k,
                 use_mmr=use_mmr,
                 mmr_lambda=mmr_lambda,
+                rrf_k=rrf_k,
             )
             stage3_ms = (_time.perf_counter() - t_stage) * 1000
             emit(
@@ -433,6 +436,7 @@ class RetrievalPipeline:
         effective_top_k: int,
         use_mmr: bool,
         mmr_lambda: float,
+        rrf_k: int | None = None,
     ) -> list[dict[str, Any]]:
         """Stage 3: 排序筛选"""
         current_candidates = candidates
@@ -455,6 +459,7 @@ class RetrievalPipeline:
                         candidates=current_candidates,
                         ranked_lists=list(ranked_lists.values()),
                         top_k=effective_top_k * 2,
+                        k=rrf_k,
                     )
                 else:
                     current_candidates = provider.rerank(

@@ -42,19 +42,37 @@ def gold_hit(chunk: dict, ref: GoldChunkRef) -> bool:
     return False
 
 
+def match_retrieved_detailed(
+    retrieved: Iterable[dict], gold: list[GoldChunkRef]
+) -> tuple[list[bool], int, list[set[int]]]:
+    """按检索顺序返回命中标记、被命中的 gold 引用数，以及每个片段命中的 gold 引用索引集合。
+
+    Returns:
+        (hits, matched_gold_count, refs_per_chunk)
+        refs_per_chunk：与 retrieved 一一对应，记录每个片段命中的 gold 引用索引（去重），
+        供 recall@k 等「前 k 结果覆盖了多少个 gold 引用」的指标使用。
+    """
+    hits: list[bool] = []
+    matched_refs: set[int] = set()
+    refs_per_chunk: list[set[int]] = []
+    for chunk in retrieved:
+        chunk_refs: set[int] = set()
+        for idx, ref in enumerate(gold):
+            if gold_hit(chunk, ref):
+                chunk_refs.add(idx)
+                matched_refs.add(idx)
+        hits.append(bool(chunk_refs))
+        refs_per_chunk.append(chunk_refs)
+    return hits, len(matched_refs), refs_per_chunk
+
+
 def match_retrieved(retrieved: Iterable[dict], gold: list[GoldChunkRef]) -> tuple[list[bool], int]:
     """按检索顺序返回命中标记列表，以及被至少一个片段命中的 gold 引用数。
 
     Returns:
         (hits, matched_gold_count)
+
+    （精细节段命中集合见 match_retrieved_detailed，用于 recall@k。）
     """
-    hits: list[bool] = []
-    matched_refs: set[int] = set()
-    for chunk in retrieved:
-        hit = False
-        for idx, ref in enumerate(gold):
-            if gold_hit(chunk, ref):
-                hit = True
-                matched_refs.add(idx)
-        hits.append(hit)
-    return hits, len(matched_refs)
+    hits, matched_gold_count, _ = match_retrieved_detailed(retrieved, gold)
+    return hits, matched_gold_count

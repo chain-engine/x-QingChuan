@@ -47,6 +47,10 @@ class EventBus(ABC):
     async def subscribe(self, callback: Any) -> None:
         """订阅事件（callback 异步接收 EventMessage）。"""
 
+    @abstractmethod
+    async def unsubscribe(self, callback: Any) -> None:
+        """取消订阅（SSE 等短生命周期消费者断开时调用，避免回调泄漏）。"""
+
 
 class InMemoryEventBus(EventBus):
     """内存事件总线（单进程内广播；重启即失，仅骨架/开发期）。"""
@@ -65,6 +69,11 @@ class InMemoryEventBus(EventBus):
     async def subscribe(self, callback: Any) -> None:
         self._subscribers.append(callback)
         logger.info(f"[EventBus] subscriber 已登记：{callback}")
+
+    async def unsubscribe(self, callback: Any) -> None:
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
+            logger.info(f"[EventBus] subscriber 已注销：{callback}")
 
 
 class RedisEventBus(EventBus):
@@ -103,6 +112,11 @@ class RedisEventBus(EventBus):
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run_loop())
             logger.info(f"[EventBus] Redis 订阅循环启动：channel={self._channel}")
+
+    async def unsubscribe(self, callback: Any) -> None:
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
+            logger.info(f"[EventBus] subscriber 已注销：{callback}")
 
     async def _run_loop(self) -> None:
         self._pubsub = self._client.pubsub()

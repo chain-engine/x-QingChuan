@@ -36,6 +36,7 @@ class RagClient:
         similarity_threshold: float | None = None,
         use_mmr: bool | None = None,
         mmr_lambda: float | None = None,
+        rrf_k: int | None = None,
     ) -> list[dict[str, Any]]:
         """调用 /rag/retrieve，返回 RetrievedChunk dict 列表（按相关性降序）。
 
@@ -50,6 +51,7 @@ class RagClient:
             "similarity_threshold": thr,
             "use_mmr": use_mmr if use_mmr is not None else cfg.use_mmr,
             "mmr_lambda": mmr_lambda if mmr_lambda is not None else cfg.mmr_lambda,
+            "rrf_k": rrf_k if rrf_k is not None else cfg.rrf_k,
         }
         data = self._post(cfg.retrieve_url, payload)
         chunks = data.get("chunks") or []

@@ -79,6 +79,7 @@ class RAGService:
         similarity_threshold: float = 0.7,
         use_mmr: bool = False,
         mmr_lambda: float = 0.5,
+        rrf_k: int | None = None,
         metadata_filter: dict[str, Any] | None = None,
         provider: str | None = None,
         temperature: float | None = None,
@@ -93,6 +94,7 @@ class RAGService:
             similarity_threshold: 相似度阈值
             use_mmr: 是否使用MMR重排序
             mmr_lambda: MMR参数
+            rrf_k: RRF 融合常数（None=装配默认）
             metadata_filter: 元数据过滤条件
             provider: LLM提供商
             temperature: 温度参数
@@ -108,6 +110,7 @@ class RAGService:
             similarity_threshold=similarity_threshold,
             use_mmr=use_mmr,
             mmr_lambda=mmr_lambda,
+            rrf_k=rrf_k,
             metadata_filter=metadata_filter,
             provider=provider,
             temperature=temperature,
@@ -134,6 +137,7 @@ class RAGService:
         similarity_threshold: float = 0.7,
         use_mmr: bool = False,
         mmr_lambda: float = 0.5,
+        rrf_k: int | None = None,
         metadata_filter: dict[str, Any] | None = None,
         operator: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
@@ -145,6 +149,7 @@ class RAGService:
             similarity_threshold: 相似度阈值
             use_mmr: 是否使用MMR重排序
             mmr_lambda: MMR参数
+            rrf_k: RRF 融合常数（None=装配默认）
             metadata_filter: 元数据过滤条件
             operator: 操作人上下文（用于审计）
 
@@ -157,6 +162,7 @@ class RAGService:
             similarity_threshold=similarity_threshold,
             use_mmr=use_mmr,
             mmr_lambda=mmr_lambda,
+            rrf_k=rrf_k,
             metadata_filter=metadata_filter,
         )
         # 业务审计：记录检索摘要（不记片段原文）

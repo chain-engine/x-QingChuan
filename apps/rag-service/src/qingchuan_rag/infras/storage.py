@@ -46,6 +46,16 @@ from typing import Any, BinaryIO
 from qingchuan_rag.core.logger import logger
 from qingchuan_rag.core.paths import resolve_service_path
 
+# S3 兼容存储可选依赖（boto3）：模块级导入，未安装时由 S3CompatibleStorage.__init__ 明确报错
+try:
+    import boto3
+    from botocore.config import Config as BotoConfig
+    from botocore.exceptions import ClientError
+except ImportError:  # pragma: no cover - 未安装 boto3 时仅 S3 provider 初始化报错
+    boto3 = None  # type: ignore[assignment]
+    BotoConfig = None  # type: ignore[assignment,misc]
+    ClientError = None  # type: ignore[assignment,misc]
+
 
 # ============================================================
 # 统一返回结构
@@ -271,12 +281,8 @@ class S3CompatibleStorage(StorageProvider):
         public_url: str = "",
         use_ssl: bool = True,
     ) -> None:
-        try:
-            import boto3
-            from botocore.config import Config as BotoConfig
-            from botocore.exceptions import ClientError
-        except ImportError as exc:
-            raise ImportError("S3 兼容存储需要 boto3，请执行: uv pip install boto3") from exc
+        if boto3 is None:
+            raise ImportError("S3 兼容存储需要 boto3，请执行: uv pip install boto3")
         self._bucket_name = bucket
         self._region = region
         self.storage_type = "s3"

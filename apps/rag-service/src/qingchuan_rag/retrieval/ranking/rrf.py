@@ -37,6 +37,7 @@ class RRFReranker(BaseRerankingProvider):
         candidates: list[dict[str, Any]],
         ranked_lists: list[list[dict[str, Any]]] | None = None,
         top_k: int | None = None,
+        k: int | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """
@@ -47,6 +48,7 @@ class RRFReranker(BaseRerankingProvider):
             candidates: 默认候选列表（未使用时传入）
             ranked_lists: 多路检索结果列表
             top_k: 返回结果数量
+            k: RRF 常数（覆盖构造时的默认 60；网格调优 / 请求级透传用，None=用默认）
             **kwargs: 额外参数
 
         Returns:
@@ -55,6 +57,10 @@ class RRFReranker(BaseRerankingProvider):
         if ranked_lists is None or len(ranked_lists) == 0:
             logger.warning("RRFReranker: no ranked lists provided, returning candidates as-is")
             return candidates[:top_k] if top_k else candidates
+
+        effective_k = self._k if k is None else int(k)
+        if effective_k <= 0:
+            effective_k = self._k
 
         rrf_scores: dict[str, float] = {}
         doc_map: dict[str, dict[str, Any]] = {}
@@ -69,7 +75,7 @@ class RRFReranker(BaseRerankingProvider):
                     rrf_scores[doc_id] = 0.0
                     doc_map[doc_id] = doc
 
-                rrf_scores[doc_id] += 1.0 / (self._k + rank + 1)
+                rrf_scores[doc_id] += 1.0 / (effective_k + rank + 1)
 
         sorted_docs = sorted(
             rrf_scores.items(),

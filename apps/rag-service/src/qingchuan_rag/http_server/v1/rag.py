@@ -54,6 +54,7 @@ async def rag_query(
             similarity_threshold=body.similarity_threshold,
             use_mmr=body.use_mmr,
             mmr_lambda=body.mmr_lambda,
+            rrf_k=body.rrf_k,
             metadata_filter=body.metadata_filter,
             provider=body.provider,
             temperature=body.temperature,
@@ -109,6 +110,7 @@ async def retrieve_docs(
             ),
             use_mmr=body.use_mmr,
             mmr_lambda=body.mmr_lambda,
+            rrf_k=body.rrf_k,
             metadata_filter=body.metadata_filter,
             operator=operator,
         )

@@ -66,6 +66,12 @@ class EvalConfig(BaseModel):
     )
     use_mmr: bool = Field(default=False, description="是否启用 MMR 多样性重排")
     mmr_lambda: float = Field(default=0.5, ge=0.0, le=1.0)
+    rrf_k: int | None = Field(
+        default=None,
+        ge=1,
+        le=500,
+        description="RRF 融合常数（None=服务端装配默认 60；网格调优时按组合传入）",
+    )
     mode: EvalMode = Field(
         default="retrieval", description="retrieval=仅检索指标；full=叠加生成侧指标"
     )
@@ -111,6 +117,10 @@ class SampleResult(BaseModel):
     mrr: float | None = None
     precision_at_3: float | None = None
     recall: float | None = None
+    recall_at_1: float | None = None
+    recall_at_3: float | None = None
+    recall_at_5: float | None = None
+    recall_at_10: float | None = None
     # full 模式（生成侧）
     answer: str | None = None
     answer_containment: float | None = None
@@ -131,6 +141,10 @@ class AggregateMetrics(BaseModel):
     precision_at_3: float | None = None
     precision_at_5: float | None = None
     recall: float | None = None
+    recall_at_1: float | None = None
+    recall_at_3: float | None = None
+    recall_at_5: float | None = None
+    recall_at_10: float | None = None
     answer_containment: float | None = None
     answer_f1: float | None = None
     error_rate: float = 0.0

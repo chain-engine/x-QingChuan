@@ -70,3 +70,62 @@ jobs:
       # 版本一致性：VERSION 与全部 pyproject 必须同版本（防 domain/rag/agent 漂移）
       - name: Check version consistency
         run: uv run --frozen python scripts/bump_version.py --check
+
+  eval:
+    name: Eval（golden set + 确定性检索指标）
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Install workspace（--frozen）
+        run: uv sync --frozen
+
+      # golden set 结构校验（重复 id / 缺失字段 / snippet 空白）
+      - name: Validate golden set
+        run: uv run --frozen --package qingchuan-eval qingchuan-eval validate
+
+      # 指标 / matcher 单元测试
+      - name: Run eval package tests
+        run: uv run --frozen --package qingchuan-eval pytest apps/qingchuan-eval/tests -q
+
+      # 轻量端到端冒烟：mock rag-service（离线 2-gram 检索，零模型依赖）跑通
+      # golden set → 指标 → 报告全链路；不设检索阈值（真实阈值在本地跑基线后手动调）
+      - name: Eval smoke（mock rag-service）
+        run: |
+          uv run --frozen --package qingchuan-eval python apps/qingchuan-eval/scripts/mock_rag_service.py &
+          MOCK_PID=$!
+          python - <<'PY'
+          import time, urllib.request
+          for _ in range(60):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:8010/docs", timeout=1)
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise SystemExit("mock rag-service 启动超时")
+          PY
+          uv run --frozen --package qingchuan-eval qingchuan-eval run \
+            --base-url http://127.0.0.1:8010 \
+            --mode retrieval \
+            --output eval-report.json
+          kill $MOCK_PID 2>/dev/null || true
+          python - <<'PY'
+          import json
+          with open("eval-report.json", encoding="utf-8") as f:
+              report = json.load(f)
+          agg = report["aggregate"]
+          assert report["all_thresholds_passed"] is None or report["all_thresholds_passed"]
+          assert agg["sample_count"] > 0, "无样本评测，冒烟无效"
+          print(
+              f"eval smoke OK: samples={agg['sample_count']} "
+              f"hit@3={agg['hit_at_3']} MRR={agg['mrr']} "
+              f"recall@3={agg['recall_at_3']} err={agg['error_rate']}"
+          )
+          PY

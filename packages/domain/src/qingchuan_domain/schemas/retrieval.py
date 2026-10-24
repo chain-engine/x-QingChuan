@@ -26,6 +26,12 @@ class RetrievalQuery(BaseModel):
     metadata_filter: dict[str, Any] | None = Field(
         default=None, description='元数据过滤条件，如 {"source_type": "policy"}'
     )
+    rrf_k: int | None = Field(
+        default=None,
+        ge=1,
+        le=500,
+        description="RRF 融合常数（None=服务端装配默认 60；网格调优 / 请求级透传用）",
+    )
     scope: str | None = Field(default=None, description="检索范围标识（如参保人/政策），预留")
 
 

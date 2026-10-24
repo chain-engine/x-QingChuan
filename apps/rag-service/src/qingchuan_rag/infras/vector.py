@@ -33,7 +33,7 @@ def _load_milvus_symbols() -> tuple[Any, Any, Any, Any]:
         raise VectorStoreError(
             "Milvus backend not installed. "
             "Install extras: `uv sync --extra milvus` "
-            "or `pip install \"qingchuan-rag[milvus]\"`"
+            'or `pip install "qingchuan-rag[milvus]"`'
         ) from e
     return CollectionSchema, DataType, FieldSchema, MilvusClient
 

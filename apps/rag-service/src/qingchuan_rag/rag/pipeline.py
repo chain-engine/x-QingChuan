@@ -67,6 +67,7 @@ class RAGPipeline:
         similarity_threshold: float = 0.7,
         use_mmr: bool = False,
         mmr_lambda: float = 0.5,
+        rrf_k: int | None = None,
         metadata_filter: dict[str, Any] | None = None,
         provider: str | None = None,
         temperature: float | None = None,
@@ -80,6 +81,7 @@ class RAGPipeline:
             similarity_threshold: 相似度阈值
             use_mmr: 是否使用MMR重排序
             mmr_lambda: MMR参数
+            rrf_k: RRF 融合常数（None=装配默认）
             metadata_filter: 元数据过滤条件
             provider: LLM提供商
             temperature: 温度参数
@@ -99,6 +101,7 @@ class RAGPipeline:
                 similarity_threshold=similarity_threshold,
                 use_mmr=use_mmr,
                 mmr_lambda=mmr_lambda,
+                rrf_k=rrf_k,
                 metadata_filter=metadata_filter,
             )
             retrieval_ms = (_time.perf_counter() - t_phase) * 1000

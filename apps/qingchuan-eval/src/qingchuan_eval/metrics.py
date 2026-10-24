@@ -38,10 +38,24 @@ def precision_at_k(hits: Sequence[bool], k: int) -> float:
 
 
 def recall(matched_gold: int, gold_total: int) -> float:
-    """gold 片段召回率。"""
+    """gold 片段召回率（全体检索结果覆盖的 gold 引用数 / gold 总数）。"""
     if gold_total <= 0:
         return 0.0
     return matched_gold / gold_total
+
+
+def recall_at_k(refs_per_chunk: Sequence[set[int]], gold_total: int, k: int) -> float:
+    """recall@k：前 k 个检索结果覆盖的 gold 引用数（去重）/ gold 总数。
+
+    与 hit@k（前 k 至少一命中）不同，recall@k 度量「前 k 结果能覆盖多少比例的
+    金标准片段」，反映检索的覆盖面；top_k 扩大时随 k 单调不减。
+    """
+    if gold_total <= 0:
+        return 0.0
+    matched: set[int] = set()
+    for refs in refs_per_chunk[:k]:
+        matched.update(refs)
+    return len(matched) / gold_total
 
 
 def answer_containment(answer: str, reference: str) -> float:

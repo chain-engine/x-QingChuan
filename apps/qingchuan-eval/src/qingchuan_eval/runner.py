@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from qingchuan_eval import metrics
 from qingchuan_eval.client import EvalClientError, RagClient
-from qingchuan_eval.matcher import match_retrieved
+from qingchuan_eval.matcher import match_retrieved_detailed
 from qingchuan_eval.schema import (
     EVAL_TOP_KS,
     AggregateMetrics,
@@ -60,7 +60,7 @@ def _eval_one(client: RagClient, entry: GoldenSetEntry, config: EvalConfig) -> S
         base.error = str(e)
         return base
 
-    hits, matched_gold = match_retrieved(retrieved, entry.gold)
+    hits, matched_gold, refs_per_chunk = match_retrieved_detailed(retrieved, entry.gold)
     base.retrieved_count = len(retrieved)
     base.hits = hits
     base.matched_gold_count = matched_gold
@@ -70,6 +70,11 @@ def _eval_one(client: RagClient, entry: GoldenSetEntry, config: EvalConfig) -> S
     base.mrr = metrics.mrr(hits)
     base.precision_at_3 = metrics.precision_at_k(hits, 3)
     base.recall = metrics.recall(matched_gold, len(entry.gold))
+    gold_total = len(entry.gold)
+    base.recall_at_1 = metrics.recall_at_k(refs_per_chunk, gold_total, 1)
+    base.recall_at_3 = metrics.recall_at_k(refs_per_chunk, gold_total, 3)
+    base.recall_at_5 = metrics.recall_at_k(refs_per_chunk, gold_total, 5)
+    base.recall_at_10 = metrics.recall_at_k(refs_per_chunk, gold_total, 10)
 
     if config.mode == "full" and entry.reference_answer:
         try:
@@ -92,6 +97,7 @@ def _aggregate(samples: list[SampleResult]) -> AggregateMetrics:
     ok = [s for s in samples if not s.error]
     hit = {k: metrics.mean([metrics.hit_at_k(s.hits, k) for s in ok]) for k in EVAL_TOP_KS}
     prec = {k: metrics.mean([metrics.precision_at_k(s.hits, k) for s in ok]) for k in EVAL_TOP_KS}
+    rec = {k: metrics.mean([getattr(s, f"recall_at_{k}") for s in ok]) for k in EVAL_TOP_KS}
 
     return AggregateMetrics(
         sample_count=len(samples),
@@ -104,6 +110,10 @@ def _aggregate(samples: list[SampleResult]) -> AggregateMetrics:
         precision_at_3=prec[3],
         precision_at_5=prec[5],
         recall=avg("recall"),
+        recall_at_1=rec[1],
+        recall_at_3=rec[3],
+        recall_at_5=rec[5],
+        recall_at_10=rec[10],
         answer_containment=avg("answer_containment"),
         answer_f1=avg("answer_f1"),
         error_rate=(len(samples) - len(ok)) / len(samples) if samples else 0.0,
