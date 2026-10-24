@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """人社数据同步服务：编排"拉取 → 转换 → 分块 → 向量化 → 入库"全流程。
 
-与观海"直接上传"的差异点（晴川差异化核心）：
+与"直接上传"模式的差异点（晴川差异化核心）：
 - 数据来源为人社系统离线数据（HRSSDataSourceClient 拉取），非用户上传；
 - 提供周期调度（APScheduler，见 sync/scheduler.py）与 HTTP 触发接口
   （POST /api/v1/sync/trigger）两种触发渠道；

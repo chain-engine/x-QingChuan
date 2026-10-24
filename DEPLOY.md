@@ -11,12 +11,13 @@
 | --- | --- | --- | --- |
 | 13306 | mysql | 运维口（可选） | 服务间走 compose 内部网络，如无需外部直连可去掉 `ports` |
 | 16379 | redis | 运维口（可选） | 同上 |
-| — | milvus（etcd + minio + standalone） | 向量库，仅内部网络 | rag-service 经 `http://milvus:19530` 访问，不暴露宿主端口 |
+| — | minio（文档内容对象存储） | 仅内部网络 | rag-service 经 `http://minio:9000` 写入文档内容；bucket 首次启动自动创建；如需控制台可放开 9002/9003 映射 |
+| — | milvus（etcd + milvus-minio + standalone） | 向量库，仅内部网络 | rag-service 经 `http://milvus:19530` 访问，不暴露宿主端口 |
 | **8010** | rag-service | **对外服务口（安全组放行）** | MCP 挂 `/mcp`，HTTP 挂 `/api/v1` |
 | **8020** | agent-service | **对外服务口（安全组放行）** | HTTP 挂 `/api/v1` |
 
-> mysql / redis / milvus（etcd + minio + standalone）/ rag-service / agent-service 全部由本 compose 编排，内部网络互通，不依赖宿主机其他服务。
-> 数据卷 `mysql-data` / `redis-data` / `etcd-data` / `minio-data` / `milvus-data` / `rag-data` / `agent-logs` / `rag-logs` 持久化，容器重建不丢数据。
+> mysql / redis / minio（文档内容对象存储）/ milvus（etcd + milvus-minio + standalone，可选 profile）/ rag-service / agent-service 全部由本 compose 编排，内部网络互通，不依赖宿主机其他服务。
+> 数据卷 `mysql-data` / `redis-data` / `minio-data`（文档存储）/ `etcd-data` / `milvus-minio-data` / `milvus-data` / `rag-data` / `agent-logs` / `rag-logs` 持久化，容器重建不丢数据。
 
 **阿里云 ECS 安全组需放行**：`8010`、`8020`（如开放运维口再加 `13306`、`16379`；建议运维口仅对管理员 IP 开放）。
 
@@ -79,7 +80,7 @@ EOF
 | --- | --- |
 | `MYSQL_ROOT_PASSWORD` / `MYSQL_USER` / `MYSQL_PASSWORD` | 业务库账号密码（必填，生产用强密码） |
 | `REDIS_PASSWORD` | Redis 密码（必填，生产用强密码） |
-| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | Milvus 对象存储组件 MinIO 凭据（`MINIO_ROOT_PASSWORD` 必填，生产用强密码） |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | MinIO 凭据（`MINIO_ROOT_PASSWORD` 必填，生产用强密码）——文档内容对象存储（minio 容器）与 Milvus profile 组件（milvus-minio 容器）共用同一组 |
 | `MIMO_API_KEY` | rag-service 大模型密钥（小米 Mimo） |
 | `QINGCHUAN_AGENT_AI_LLM_API_KEY` | agent-service 大模型密钥（独立于 RAG） |
 | `QINGCHUAN_AGENT_CORS_ORIGINS` | agent 允许的跨域来源（生产禁 `*`；pydantic list 类型须用 **JSON 数组**格式，如 `["https://admin.example.com"]`；默认 localhost 开发白名单） |
@@ -98,7 +99,8 @@ df -h /                                          # 需剩余 8G+（两个镜像�
 docker compose up -d --build
 ```
 
-- `mysql` / `redis` / `etcd` / `minio` / `milvus` 先启动并通过健康检查（mysql/redis 约 30s，milvus 首次启动约 90s+），`rag-service`、`agent-service` 随后启动
+- `mysql` / `redis` / `minio` 先启动并通过健康检查（mysql/redis 约 30s），`rag-service`、`agent-service` 随后启动；文档 bucket `qingchuan` 由 rag 首次启动自动创建（幂等）
+- 如启用 Milvus：`docker compose --profile milvus up -d`（etcd / milvus-minio / milvus 需等待 start_period，milvus 首次启动约 90s+）
 - agent-service 以生产模式运行（`QINGCHUAN_AGENT_APP_ENV=production`），强制启用 Redis + redis checkpoint
 - 首次构建 rag 镜像较大（CPU-only torch，约 3.5GB），视服务器带宽需 5~20 分钟
 - 首次启动自动建表（幂等）：审计日志 / 同步任务 / 文档元数据
@@ -106,7 +108,7 @@ docker compose up -d --build
 ### 3.5 验证部署
 
 ```bash
-docker compose ps          # 7 个容器全部 healthy（etcd/minio/milvus 需等待 start_period）
+docker compose ps          # 5 个容器全部 healthy（默认不启 Milvus；--profile milvus 后共 8 个）
 curl -s http://localhost:8010/api/v1/health
 curl -s http://localhost:8020/api/v1/health
 ```
@@ -146,8 +148,8 @@ docker compose down -v       # 彻底清理（含 mysql/redis/milvus 数据，�
 | --- | --- | --- |
 | MySQL（审计/任务/文档元数据） | `mysql-data` 卷 | `mysqldump` 或卷快照 |
 | Redis（checkpoint/事件总线） | `redis-data` 卷 | 非核心，可重建 |
-| Milvus 向量库 | `milvus-data` 卷（+ `etcd-data` / `minio-data` 元数据与对象存储卷） | 三卷一并快照（milvus 数据跨 etcd/minio 强依赖） |
-| 文档对象存储 | `rag-data` 卷（`/app/data/documents`） | 卷快照 |
+| Milvus 向量库 | `milvus-data` 卷（+ `etcd-data` / `milvus-minio-data` 元数据与对象存储卷） | 三卷一并快照（milvus 数据跨 etcd/milvus-minio 强依赖） |
+| 文档对象存储 | `minio-data` 卷（compose 内置 minio 容器） | 卷快照；本地调试走本机 MinIO（`127.0.0.1:9002`）或 `./data/documents` |
 
 ### 4.3 升级
 

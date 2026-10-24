@@ -1,8 +1,5 @@
 # QingChuan rag-service（qingchuan-rag）
 
-HRSS data offline indexing + RAG (Retrieval-Augmented Generation) integrated service platform.
-Make HRSS domain knowledge retrievable and answerable — ships an offline indexing pipeline and exposes retrieval & Q&A over HTTP + MCP dual protocols, adapted from the x-GuanHai engineering project.
-
 [中文](README.md) | English
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
@@ -100,7 +97,7 @@ uv run qingchuan-rag-api --port 8010    # override the listen port
 uv run uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
-**Docker container deployment** (run from the repository root; vector store defaults to Chroma with local persistence — zero external dependencies. To switch to Milvus, first `docker compose --profile milvus up -d` to start the built-in etcd + MinIO + Milvus standalone and set `VECTOR_STORE_TYPE=milvus`):
+**Docker container deployment** (run from the repository root; document content goes to the built-in minio container; vector store defaults to Chroma with local persistence — zero external dependencies. To switch to Milvus, first `docker compose --profile milvus up -d` to start the built-in etcd + milvus-minio + Milvus standalone and set `VECTOR_STORE_TYPE=milvus`):
 
 ```bash
 docker compose up --build rag-service
@@ -109,7 +106,7 @@ docker compose up --build rag-service
 ### 🧪 6. Common Engineering Commands
 
 ```bash
-uv run ruff check .            # static code check (rules aligned with x-GuanHai)
+uv run ruff check .            # static code check (rules in pyproject.toml [tool.ruff])
 uv run ruff format .           # code formatting
 uv run pytest                  # unit / integration / API tests (tests/ directory)
 pre-commit run --all-files     # pre-commit hooks (ruff --fix + ruff-format)
@@ -367,7 +364,7 @@ The service enables **Swagger interactive docs / ReDoc read-only docs / OpenAPI 
 | MySQL 8.0 | Audit logs / sync task status | `DATABASE_URL` | Required in production; SQLite works locally (`sqlite:///./data/qingchuan.db`); database must be created in advance (`utf8mb4`) |
 | Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **Default**: local persistence, zero external dependencies; Milvus optional (`uv sync --extra milvus` + `VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`) |
 | BM25 index | Sparse retrieval index (incremental inverted, keyword matching) | `./data/bm25/default.json` (index_name defaults to `default`) | Incrementally maintained in O(terms); snapshot persistence (default flush every 50 mutations + on shutdown) |
-| Document storage | Uploaded source documents | `./data/documents` | DocumentRepository storage path |
+| Document storage | Uploaded source documents (object storage) | `STORAGE_PROVIDER=local` (`./data/documents`) / `s3` (`STORAGE_S3_ENDPOINT_URL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET` / `PREFIX` / `USE_SSL`) | **Local dev defaults to a local MinIO** (`http://127.0.0.1:9002`); compose deployment uses the built-in minio container (`http://minio:9000`); bucket is auto-created on first start; falls back to local when S3 credentials are missing |
 | Log files | loguru file rotation | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days |
 
 Data structure definitions (ORM entities):

@@ -1,8 +1,5 @@
 # 晴川 agent-service（qingchuan-agent）
 
-人机交互的多智能体编排平台。
-派活、编排、聚合 —— 顶层编排图执行 `route → subagent → aggregate`，新 Agent 注册即可扩展，经 MCP 工具调用 rag-service 完成检索问答。
-
 [English](README.en.md) | 中文
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)

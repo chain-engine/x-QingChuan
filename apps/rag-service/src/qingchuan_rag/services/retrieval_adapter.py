@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""检索端口适配器：将观海检索流水线适配为共享领域协议 RetrievalPort。
+"""检索端口适配器：将 rag-service 三阶段检索流水线适配为共享领域协议 RetrievalPort。
 
 共享领域包 qingchuan_domain 定义 RetrievalPort / RetrievalQuery /
-RetrievalResponse 契约；本适配器在 rag-service 内把观海三阶段检索
+RetrievalResponse 契约；本适配器在 rag-service 内把三阶段检索
 流水线（向量 / BM25 候选 → RRF 融合 → 阈值 / MMR 重排）包装为领域协议，
 供未来 agent-service 以库方式集成时直接依赖端口，不感知向量库实现。
 """

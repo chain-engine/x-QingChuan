@@ -32,7 +32,7 @@ class RetrievalQuery(BaseModel):
 class RetrievedChunk(BaseModel):
     """检索命中的文档片段（领域协议）。
 
-    text 为主字段（与观海检索结果结构一致）；content 仅为兼容早期骨架
+    text 为主字段（检索结果统一结构）；content 仅为兼容早期骨架
     调用的别名输入，构造时自动同步到 text。
     """
 

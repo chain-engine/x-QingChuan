@@ -1,7 +1,6 @@
 # QingChuan（晴川）
 
-HRSS data offline indexing + RAG (Retrieval-Augmented Generation) + a human-interactive multi-agent orchestration platform (Phase 1 currently focuses on intelligent Q&A).
-Make government-domain knowledge searchable, answerable and orchestratable — built on HRSS data, exposed via dual-protocol (HTTP + MCP) services, and scheduled by LangGraph multi-agent orchestration.
+[中文](README.md) | English
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)
@@ -20,8 +19,6 @@ Make government-domain knowledge searchable, answerable and orchestratable — b
 ![Forks](https://img.shields.io/github/forks/chain-engine/x-QingChuan?label=Forks)
 ![License](https://img.shields.io/github/license/chain-engine/x-QingChuan?label=License)
 ![Commits](https://img.shields.io/github/commit-activity/m/chain-engine/x-QingChuan?label=Commits)
-
-[中文](README.md) | English
 
 ## 💡 Project Introduction
 
@@ -54,7 +51,7 @@ uv run qingchuan-agent-api
 
 Access <http://127.0.0.1:8020>. See [agent-service/README.en.md](apps/agent-service/README.en.md).
 
-> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, rag-service and agent-service (vector store defaults to Chroma with local persistence — zero external dependencies). For Milvus, append `docker compose --profile milvus up -d` (etcd + MinIO + Milvus standalone). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
+> **Docker deployment**: `docker compose up -d --build` orchestrates MySQL, Redis, MinIO, rag-service and agent-service (MinIO serves document content object storage; vector store defaults to Chroma with local persistence — zero external dependencies). For Milvus, append `docker compose --profile milvus up -d` (etcd + milvus-minio + Milvus standalone). For Aliyun production deployment, see [DEPLOY.md](DEPLOY.md).
 
 ## 📁 Project Structure
 
@@ -248,9 +245,9 @@ MCP endpoint: `/mcp` (Streamable HTTP), tools `retrieve_docs` / `rag_query` (rea
 | MySQL 8.0 | Audit logs / sync tasks (rag); Agent tasks / events (agent, disabled by default) | rag: `DATABASE_URL`; agent: `QINGCHUAN_AGENT_DATABASE_*` | SQLite works locally (`sqlite:///./data/qingchuan.db`); database must be created in advance (`utf8mb4`) |
 | Redis 7 | agent checkpoint (resume) / event bus (cross-process pub/sub) | `QINGCHUAN_AGENT_REDIS_ENABLED` / `HOST` / `PORT` / `DB` / `PASSWORD`, checkpoint via `QINGCHUAN_AGENT_AGENT_CHECKPOINT=redis` | agent-side only; required in production (checkpoint must be redis); falls back to in-memory when connection fails; checkpoint and event bus share one instance |
 | Chroma vector store | Dense vector index (document embeddings) | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **Default**: local persistence, zero external dependencies (single node / cloud VM ready) |
-| Milvus vector store | Dense vector index (Milvus form) | Requires extras: `uv sync --extra milvus`; `VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` | Optional backend; compose ships etcd + MinIO + Milvus standalone via `docker compose --profile milvus up -d` (data on milvus-data / minio-data / etcd-data volumes); external Milvus supports auth (`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`) |
+| Milvus vector store | Dense vector index (Milvus form) | Requires extras: `uv sync --extra milvus`; `VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` | Optional backend; compose ships etcd + milvus-minio + Milvus standalone via `docker compose --profile milvus up -d` (data on milvus-data / milvus-minio-data / etcd-data volumes); external Milvus supports auth (`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`) |
 | BM25 index | Sparse retrieval index (incremental inverted, keyword matching) | `./data/bm25/default.json` (index_name defaults to `default`) | Incrementally maintained in O(terms); snapshot persistence (default flush every 50 mutations + on shutdown) |
-| Document storage | rag uploaded source documents | `./data/documents` | DocumentRepository storage path |
+| Document storage | rag-uploaded source documents (object storage) | Local: `./data/documents`; S3/MinIO: `STORAGE_PROVIDER=s3` + `STORAGE_S3_*` (MinIO / OSS / COS / Kodo) | **Local dev defaults to a local MinIO** (`http://127.0.0.1:9002`); compose deployment provides a built-in minio container (`http://minio:9000`); bucket is auto-created on first start; falls back to local when S3 credentials are missing |
 | Log files | loguru file rotation | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | Rotation 1 day / retention 7 days (zip compression on agent side) |
 
 ## 📄 License

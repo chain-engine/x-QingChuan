@@ -274,6 +274,7 @@ class S3CompatibleStorage(StorageProvider):
         try:
             import boto3
             from botocore.config import Config as BotoConfig
+            from botocore.exceptions import ClientError
         except ImportError as exc:
             raise ImportError("S3 兼容存储需要 boto3，请执行: uv pip install boto3") from exc
         self._bucket_name = bucket
@@ -298,6 +299,43 @@ class S3CompatibleStorage(StorageProvider):
         logger.info(
             f"S3CompatibleStorage initialized: bucket={bucket} endpoint={endpoint_url} region={region}"
         )
+        # 确保 bucket 存在（幂等；本地 MinIO 与 compose 内置 minio 均无需手动建桶）
+        self._ensure_bucket()
+
+    def _ensure_bucket(self) -> None:
+        """确保 bucket 存在（幂等创建；失败仅告警不阻断，上传时再明确报错）。
+
+        - 本地调试：D:\\04Docker\\MinIO（默认已建 qingchuan）
+        - compose 部署：内置 minio 容器首次启动自动创建
+        - 云厂商（OSS/COS/Kodo）：按各自 region 规则创建
+        """
+        try:
+            self._client.head_bucket(Bucket=self._bucket_name)
+            logger.info(f"S3CompatibleStorage bucket ready: {self._bucket_name}")
+            return
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code not in ("404", "NoSuchBucket"):
+                logger.warning(
+                    f"S3CompatibleStorage bucket check failed: bucket={self._bucket_name} "
+                    f"code={code} error={e}"
+                )
+                return
+        try:
+            kwargs: dict[str, Any] = {}
+            if self._region:
+                kwargs["CreateBucketConfiguration"] = {"LocationConstraint": self._region}
+            self._client.create_bucket(Bucket=self._bucket_name, **kwargs)
+            logger.info(f"S3CompatibleStorage bucket created: {self._bucket_name}")
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+                logger.info(f"S3CompatibleStorage bucket already exists: {self._bucket_name}")
+            else:
+                logger.warning(
+                    f"S3CompatibleStorage bucket create failed: bucket={self._bucket_name} "
+                    f"code={code} error={e}"
+                )
 
     def _full_key(self, key: str) -> str:
         """拼接 prefix。"""

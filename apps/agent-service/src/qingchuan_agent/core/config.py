@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""应用配置管理（晴川 x-QingChuan，对齐北辰 core/config 分段口径）。
+"""应用配置管理（晴川 x-QingChuan，对齐 rag-service core/config.py 手搓风格）。
 
-配置来源与优先级：环境变量 > .env > 代码默认值。
-分段配置各自带独立环境变量前缀（如 QINGCHUAN_AGENT_LOGGING_LEVEL），
-避免扁平面板式配置散落；配置非法直接阻断启动（validate）。
+全局配置中心：支持从环境变量和 YAML 配置文件读取配置。
+优先级：环境变量 > YAML 配置文件 > 默认配置。
+
+分段配置各自带独立环境变量前缀（QINGCHUAN_AGENT_*），避免扁平面板式配置散落；
+配置非法直接阻断启动（validate，生产环境强制校验清单见 Settings.validate）。
 
 Usage:
     from qingchuan_agent.core.config import settings
@@ -13,29 +15,47 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 from urllib.parse import quote_plus
 
-from dotenv import dotenv_values
-from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import yaml
+from dotenv import load_dotenv
 
 from qingchuan_agent.constants import Environment, RouteMode
 
-# 仓库根 .env（本地开发单一配置源；任意 CWD 启动均能加载）
+# 仓库根 .env（本地开发单一配置源；任意 CWD 启动均能加载，避免 .env 相对 CWD 失效）
 QINGCHUAN_ROOT_ENV: Final[Path] = Path(__file__).resolve().parents[5] / ".env"
 
 
-class LoggingSettings(BaseSettings):
-    """日志配置。"""
+@dataclass
+class AppConfig:
+    """应用信息配置（app_env / service_name，独立成段便于 env 映射与属性快捷方式）。"""
 
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_LOGGING_", extra="ignore")
+    env: str = Environment.DEVELOPMENT.mark
+    service_name: str = "agent-service"
+
+
+@dataclass
+class ServerConfig:
+    """HTTP 服务配置（uvicorn 监听）。"""
+
+    host: str = "0.0.0.0"
+    port: int = 8020
+    debug: bool = True
+    workers: int = 1
+
+
+@dataclass
+class LoggingConfig:
+    """日志配置。"""
 
     level: str = "INFO"
     format: str = "console"  # "json" | "console"
-    # 与 rag-service 保持一致：相对路径由 logger 按服务根目录（src 的上级目录）解析，
+    # 相对路径由 logger 按服务根目录（src 的上级目录）解析，
     # 任意 CWD 启动均落位 apps/agent-service/logs/，文件名 x-QingChuan-{time:YYYYMMDDHHmmss}.log
     file_path: str = "./logs/x-QingChuan-{time:YYYYMMDDHHmmss}.log"
     rotation: str = "1 day"
@@ -44,33 +64,20 @@ class LoggingSettings(BaseSettings):
     console_output: bool = True
 
 
-class ServerSettings(BaseSettings):
-    """HTTP 服务配置（uvicorn 监听）。"""
-
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_SERVER_", extra="ignore")
-
-    host: str = "0.0.0.0"
-    port: int = 8020
-    debug: bool = True
-    workers: int = 1
-
-
-class CorsSettings(BaseSettings):
+@dataclass
+class CORSConfig:
     """跨域配置。"""
 
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_CORS_", extra="ignore")
-
     enabled: bool = True
-    origins: list[str] = ["*"]
+    origins: list[str] = field(default_factory=lambda: ["*"])
     allow_credentials: bool = True
-    allow_methods: list[str] = ["*"]
-    allow_headers: list[str] = ["*"]
+    allow_methods: list[str] = field(default_factory=lambda: ["*"])
+    allow_headers: list[str] = field(default_factory=lambda: ["*"])
 
 
-class DatabaseSettings(BaseSettings):
+@dataclass
+class DatabaseConfig:
     """数据库配置（Agent 任务 / 事件持久化；骨架阶段默认关闭，可无库启动）。"""
-
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_DATABASE_", extra="ignore")
 
     enabled: bool = False  # 骨架阶段默认关闭，业务接入时开启
     host: str = "localhost"
@@ -96,10 +103,13 @@ class DatabaseSettings(BaseSettings):
         return f"mysql+pymysql://{auth}{self.host}:{self.port}/{quote_plus(self.database)}"
 
 
-class AiLLMSettings(BaseSettings):
-    """大模型配置（LangChain ChatOpenAI 兼容接口；骨架阶段不配 key 走 Mock）。"""
+@dataclass
+class AiLLMSettings:
+    """大模型配置（LangChain ChatOpenAI 兼容接口；骨架阶段不配 key 走 Mock）。
 
-    model_config = SettingsConfigDict(extra="ignore")
+    类名保留原 pydantic-settings 时代的 AiLLMSettings（infras/llm.py 按此名导入），
+    字段与环境变量前缀（QINGCHUAN_AGENT_AI_LLM_*）均保持不变。
+    """
 
     base_url: str = ""
     api_key: str = ""  # 敏感信息，仅通过环境变量 / .env 注入
@@ -109,19 +119,17 @@ class AiLLMSettings(BaseSettings):
     timeout_seconds: int = 60
 
 
-class AiSettings(BaseSettings):
+@dataclass
+class AiConfig:
     """AI 整体配置（本期骨架：LLM 预留，节点内业务为 mock）。"""
 
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_AI_", extra="ignore")
-
     enabled: bool = True
-    llm: AiLLMSettings = AiLLMSettings()
+    llm: AiLLMSettings = field(default_factory=AiLLMSettings)
 
 
-class AgentSettings(BaseSettings):
+@dataclass
+class AgentConfig:
     """Agent 编排配置（调度中枢 / 子图 / 任务状态机）。"""
-
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_AGENT_", extra="ignore")
 
     route_mode: str = RouteMode.EXPLICIT.mark  # explicit / llm / hybrid
     checkpoint: str = "memory"  # memory / redis（redis 需 QINGCHUAN_AGENT_REDIS_ENABLED=true）
@@ -130,15 +138,14 @@ class AgentSettings(BaseSettings):
     task_timeout_seconds: int = 300  # 单任务超时
 
 
-class RedisSettings(BaseSettings):
+@dataclass
+class RedisConfig:
     """Redis 配置（checkpoint 与事件总线共用同一实例 / 连接配置）。
 
     - checkpoint：agent.checkpoint=redis 时，LangGraph RedisSaver 走同步连接
     - 事件总线：redis.enabled=true 时，EventBus 工厂切换 Redis Pub/Sub（跨进程广播）
     两者共用同一 Redis 实例（同 host/port/db），分别持有同步 / 异步连接池。
     """
-
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_REDIS_", extra="ignore")
 
     enabled: bool = False  # 默认关闭：骨架期可无 Redis 启动（memory checkpoint + 内存事件总线）
     host: str = "localhost"
@@ -164,10 +171,9 @@ class RedisSettings(BaseSettings):
         return f"{scheme}://{auth}{self.host}:{self.port}/{self.db}"
 
 
-class RagClientSettings(BaseSettings):
+@dataclass
+class RagClientConfig:
     """rag-service 客户端配置（MCP 优先，HTTP 兜底）。"""
-
-    model_config = SettingsConfigDict(env_prefix="QINGCHUAN_AGENT_RAG_", extra="ignore")
 
     # MCP 主链路：rag-service 以 streamable HTTP 挂载 /mcp（见 rag-service main.py），
     # agent 经 qingchuan_common.mcp.MCPClient 连接调用 retrieve_docs / rag_query
@@ -177,168 +183,440 @@ class RagClientSettings(BaseSettings):
     mcp_timeout_seconds: float = 60.0
 
 
-class Settings(BaseSettings):
-    """Agent 服务全局配置（分段：server / logging / cors / database / ai / agent / rag）。"""
+class Settings:
+    """应用配置类（对齐 rag-service Settings 手搓形态）。
 
-    model_config = SettingsConfigDict(
-        env_prefix="QINGCHUAN_AGENT_",
-        env_file=str(QINGCHUAN_ROOT_ENV),
-        extra="ignore",
-    )
+    支持从环境变量和 YAML 配置文件读取配置。
+    优先级：环境变量 > YAML 配置文件 > 默认配置。
+    配置非法直接阻断启动（validate；生产环境强制校验清单见 validate 内注释）。
+    """
 
-    app_env: str = Environment.DEVELOPMENT.mark
-    service_name: str = "agent-service"
+    CONFIG_FILE_PATH: Final[str] = "config.yaml"
 
-    server: ServerSettings = ServerSettings()
-    logging: LoggingSettings = LoggingSettings()
-    cors: CorsSettings = CorsSettings()
-    database: DatabaseSettings = DatabaseSettings()
-    ai: AiSettings = AiSettings()
-    agent: AgentSettings = AgentSettings()
-    rag: RagClientSettings = RagClientSettings()
-    redis: RedisSettings = RedisSettings()
+    def __init__(self) -> None:
+        """初始化配置"""
+        load_dotenv(QINGCHUAN_ROOT_ENV)
+        self._config: dict[str, Any] = self._load_config()
+        self._parse_config()
+        self.validate()
 
-    @model_validator(mode="after")
-    def _load_database_from_env_file(self) -> Settings:
-        """从 .env 补齐 database 段（pydantic-settings 的 env_file 不作用于嵌套模型字段）。
+    def _get_default_config(self) -> dict[str, Any]:
+        """获取默认配置"""
+        return {
+            "app": {
+                "env": Environment.DEVELOPMENT.mark,
+                "service_name": "agent-service",
+            },
+            "server": {
+                "host": "0.0.0.0",
+                "port": 8020,
+                "debug": True,
+                "workers": 1,
+            },
+            "logging": {
+                "level": "INFO",
+                "format": "console",
+                "file_path": "./logs/x-QingChuan-{time:YYYYMMDDHHmmss}.log",
+                "rotation": "1 day",
+                "retention": "7 days",
+                "compression": "zip",
+                "console_output": True,
+            },
+            "cors": {
+                "enabled": True,
+                "origins": ["*"],
+                "allow_credentials": True,
+                "allow_methods": ["*"],
+                "allow_headers": ["*"],
+            },
+            "database": {
+                "enabled": False,
+                "host": "localhost",
+                "port": 3306,
+                "user": "root",
+                "password": "",
+                "database": "qingchuan",
+                "pool_size": 5,
+                "max_overflow": 10,
+                "pool_timeout": 30,
+                "pool_recycle": 3600,
+                "echo": False,
+            },
+            "ai": {
+                "enabled": True,
+                "llm": {
+                    "base_url": "",
+                    "api_key": "",
+                    "model": "deepseek-chat",
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                    "timeout_seconds": 60,
+                },
+            },
+            "agent": {
+                "route_mode": RouteMode.EXPLICIT.mark,
+                "checkpoint": "memory",
+                "confidence_threshold": 0.7,
+                "task_max_retries": 3,
+                "task_timeout_seconds": 300,
+            },
+            "redis": {
+                "enabled": False,
+                "host": "localhost",
+                "port": 6379,
+                "db": 0,
+                "username": "",
+                "password": "",
+                "ssl": False,
+                "url": "",
+                "socket_timeout": 5.0,
+            },
+            "rag": {
+                "mcp_url": "http://rag-service:8010/mcp",
+                "http_base_url": "http://rag-service:8010",
+                "mcp_timeout_seconds": 60.0,
+            },
+        }
 
-        优先级：OS 环境变量 > .env > 代码默认值。仅当 OS 环境未提供对应变量时，
-        才从 .env 取数，避免覆盖部署环境注入的配置。
+    def _load_config(self) -> dict[str, Any]:
+        """加载配置
+
+        优先级：环境变量 > YAML 配置文件 > 默认配置
         """
-        values = dotenv_values(QINGCHUAN_ROOT_ENV)
-        if not values:
-            return self
-        prefix = "QINGCHUAN_AGENT_DATABASE_"
-        overrides: dict[str, object] = {}
-        for field in ("enabled", "host", "port", "user", "password", "database"):
-            env_key = prefix + field.upper()
-            if env_key in values and env_key not in os.environ:
-                overrides[field] = values[env_key]
-        if overrides:
-            merged = self.database.model_dump()
-            merged.update(overrides)
-            self.database = DatabaseSettings(**merged)
-        return self
+        config: dict[str, Any] = self._get_default_config()
+        self._load_from_file(config)
+        self._load_from_env(config)
+        return config
 
-    @model_validator(mode="after")
-    def _load_rag_from_env_file(self) -> Settings:
-        """从 .env 补齐 rag 段（嵌套模型字段不自动读取 env_file，与 database 段同因）。"""
-        values = dotenv_values(QINGCHUAN_ROOT_ENV)
-        if not values:
-            return self
-        prefix = "QINGCHUAN_AGENT_RAG_"
-        overrides: dict[str, object] = {}
-        for field in ("mcp_url", "http_base_url", "mcp_timeout_seconds"):
-            env_key = prefix + field.upper()
-            if env_key in values and env_key not in os.environ:
-                overrides[field] = values[env_key]
-        if overrides:
-            merged = self.rag.model_dump()
-            merged.update(overrides)
-            self.rag = RagClientSettings(**merged)
-        return self
+    def _load_from_file(self, config: dict[str, Any]) -> None:
+        """从 YAML 文件加载配置（存在才加载；仓库默认无此文件即纯 env 驱动）"""
+        config_file: Path = Path(self.CONFIG_FILE_PATH)
+        if config_file.exists():
+            try:
+                with open(config_file, encoding="utf-8") as f:
+                    file_config: dict[str, Any] = yaml.safe_load(f) or {}
+                self._merge_config(config, file_config)
+            except Exception as e:
+                print(f"Warning: Cannot load config file {self.CONFIG_FILE_PATH}: {e}")
 
-    @model_validator(mode="after")
-    def _load_ai_from_env(self) -> Settings:
-        """从 OS 环境变量与 .env 补齐 ai.llm 段。
+    def _merge_config(self, base: dict[str, Any], override: dict[str, Any]) -> None:
+        """递归合并配置"""
+        for key, value in override.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                self._merge_config(base[key], value)
+            else:
+                base[key] = value
 
-        与 database / rag 段同因：pydantic-settings 的 env_file 不作用于嵌套模型字段。
-        区别在于 ai.llm 是两级嵌套（Settings.ai.llm），连 OS 环境变量的两级前缀
-        也不会被 pydantic 组装读取，因此这里同时兜住 os.environ 与 .env。
-        优先级：OS 环境变量 > .env > 代码默认值（OS 已注入时不再用 .env 覆盖）。
-        """
-        prefix = "QINGCHUAN_AGENT_AI_LLM_"
-        os_values = {k: v for k, v in os.environ.items() if k.startswith(prefix)}
-        file_values = dotenv_values(QINGCHUAN_ROOT_ENV)
-        overrides: dict[str, object] = {}
-        for field in (
-            "base_url",
-            "api_key",
-            "model",
-            "temperature",
-            "max_tokens",
-            "timeout_seconds",
-        ):
-            env_key = prefix + field.upper()
-            raw = os_values.get(env_key, file_values.get(env_key))
-            if raw is None:
+    def _parse_list(self, value: str) -> list[str]:
+        """环境变量 → list[str]：兼容 JSON 数组（["a","b"]）与逗号分隔（a,b）两种写法。"""
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    return [str(x) for x in parsed]
+            except ValueError:
+                pass
+        return [x.strip() for x in text.split(",") if x.strip()]
+
+    def _to_bool(self, value: str) -> bool:
+        return str(value).lower() in ("true", "1", "yes")
+
+    def _load_from_env(self, config: dict[str, Any]) -> None:
+        """从环境变量加载配置（env 变量名与 .env 完全保持 QINGCHUAN_AGENT_* 前缀不变）"""
+        env_mappings = {
+            # 应用信息
+            "QINGCHUAN_AGENT_APP_ENV": ("app", "env", str),
+            "QINGCHUAN_AGENT_SERVICE_NAME": ("app", "service_name", str),
+            # 服务
+            "QINGCHUAN_AGENT_SERVER_HOST": ("server", "host", str),
+            "QINGCHUAN_AGENT_SERVER_PORT": ("server", "port", int),
+            "QINGCHUAN_AGENT_SERVER_DEBUG": ("server", "debug", self._to_bool),
+            "QINGCHUAN_AGENT_SERVER_WORKERS": ("server", "workers", int),
+            # 日志
+            "QINGCHUAN_AGENT_LOGGING_LEVEL": ("logging", "level", str),
+            "QINGCHUAN_AGENT_LOGGING_FORMAT": ("logging", "format", str),
+            "QINGCHUAN_AGENT_LOGGING_FILE_PATH": ("logging", "file_path", str),
+            "QINGCHUAN_AGENT_LOGGING_ROTATION": ("logging", "rotation", str),
+            "QINGCHUAN_AGENT_LOGGING_RETENTION": ("logging", "retention", str),
+            "QINGCHUAN_AGENT_LOGGING_COMPRESSION": ("logging", "compression", str),
+            "QINGCHUAN_AGENT_LOGGING_CONSOLE_OUTPUT": (
+                "logging",
+                "console_output",
+                self._to_bool,
+            ),
+            # CORS
+            "QINGCHUAN_AGENT_CORS_ENABLED": ("cors", "enabled", self._to_bool),
+            "QINGCHUAN_AGENT_CORS_ORIGINS": ("cors", "origins", self._parse_list),
+            "QINGCHUAN_AGENT_CORS_ALLOW_CREDENTIALS": (
+                "cors",
+                "allow_credentials",
+                self._to_bool,
+            ),
+            "QINGCHUAN_AGENT_CORS_ALLOW_METHODS": ("cors", "allow_methods", self._parse_list),
+            "QINGCHUAN_AGENT_CORS_ALLOW_HEADERS": ("cors", "allow_headers", self._parse_list),
+            # 数据库
+            "QINGCHUAN_AGENT_DATABASE_ENABLED": ("database", "enabled", self._to_bool),
+            "QINGCHUAN_AGENT_DATABASE_HOST": ("database", "host", str),
+            "QINGCHUAN_AGENT_DATABASE_PORT": ("database", "port", int),
+            "QINGCHUAN_AGENT_DATABASE_USER": ("database", "user", str),
+            "QINGCHUAN_AGENT_DATABASE_PASSWORD": ("database", "password", str),
+            "QINGCHUAN_AGENT_DATABASE_DATABASE": ("database", "database", str),
+            "QINGCHUAN_AGENT_DATABASE_POOL_SIZE": ("database", "pool_size", int),
+            "QINGCHUAN_AGENT_DATABASE_MAX_OVERFLOW": ("database", "max_overflow", int),
+            "QINGCHUAN_AGENT_DATABASE_POOL_TIMEOUT": ("database", "pool_timeout", int),
+            "QINGCHUAN_AGENT_DATABASE_POOL_RECYCLE": ("database", "pool_recycle", int),
+            "QINGCHUAN_AGENT_DATABASE_ECHO": ("database", "echo", self._to_bool),
+            # AI / LLM
+            "QINGCHUAN_AGENT_AI_ENABLED": ("ai", "enabled", self._to_bool),
+            "QINGCHUAN_AGENT_AI_LLM_BASE_URL": ("ai.llm", "base_url", str),
+            "QINGCHUAN_AGENT_AI_LLM_API_KEY": ("ai.llm", "api_key", str),
+            "QINGCHUAN_AGENT_AI_LLM_MODEL": ("ai.llm", "model", str),
+            "QINGCHUAN_AGENT_AI_LLM_TEMPERATURE": ("ai.llm", "temperature", float),
+            "QINGCHUAN_AGENT_AI_LLM_MAX_TOKENS": ("ai.llm", "max_tokens", int),
+            "QINGCHUAN_AGENT_AI_LLM_TIMEOUT_SECONDS": ("ai.llm", "timeout_seconds", int),
+            # Agent 编排
+            "QINGCHUAN_AGENT_AGENT_ROUTE_MODE": ("agent", "route_mode", str),
+            "QINGCHUAN_AGENT_AGENT_CHECKPOINT": ("agent", "checkpoint", str),
+            "QINGCHUAN_AGENT_AGENT_CONFIDENCE_THRESHOLD": (
+                "agent",
+                "confidence_threshold",
+                float,
+            ),
+            "QINGCHUAN_AGENT_AGENT_TASK_MAX_RETRIES": ("agent", "task_max_retries", int),
+            "QINGCHUAN_AGENT_AGENT_TASK_TIMEOUT_SECONDS": (
+                "agent",
+                "task_timeout_seconds",
+                int,
+            ),
+            # Redis
+            "QINGCHUAN_AGENT_REDIS_ENABLED": ("redis", "enabled", self._to_bool),
+            "QINGCHUAN_AGENT_REDIS_HOST": ("redis", "host", str),
+            "QINGCHUAN_AGENT_REDIS_PORT": ("redis", "port", int),
+            "QINGCHUAN_AGENT_REDIS_DB": ("redis", "db", int),
+            "QINGCHUAN_AGENT_REDIS_USERNAME": ("redis", "username", str),
+            "QINGCHUAN_AGENT_REDIS_PASSWORD": ("redis", "password", str),
+            "QINGCHUAN_AGENT_REDIS_SSL": ("redis", "ssl", self._to_bool),
+            "QINGCHUAN_AGENT_REDIS_URL": ("redis", "url", str),
+            "QINGCHUAN_AGENT_REDIS_SOCKET_TIMEOUT": ("redis", "socket_timeout", float),
+            # rag-service 客户端
+            "QINGCHUAN_AGENT_RAG_MCP_URL": ("rag", "mcp_url", str),
+            "QINGCHUAN_AGENT_RAG_HTTP_BASE_URL": ("rag", "http_base_url", str),
+            "QINGCHUAN_AGENT_RAG_MCP_TIMEOUT_SECONDS": ("rag", "mcp_timeout_seconds", float),
+        }
+
+        for env_key, (section, field_key, converter) in env_mappings.items():
+            env_value = os.environ.get(env_key)
+            if env_value is None:
                 continue
             try:
-                if field == "temperature":
-                    overrides[field] = float(raw)
-                elif field in ("max_tokens", "timeout_seconds"):
-                    overrides[field] = int(raw)
-                else:
-                    overrides[field] = str(raw)
-            except (ValueError, TypeError):
+                # 嵌套段（如 ai.llm）按 "." 逐级下钻
+                target: dict[str, Any] = config
+                for part in section.split("."):
+                    target = target[part]
+                target[field_key] = converter(env_value)
+            except (ValueError, TypeError, KeyError):
                 pass
-        if overrides:
-            merged = self.ai.llm.model_dump()
-            merged.update(overrides)
-            self.ai.llm = AiLLMSettings(**merged)
-        return self
 
-    @model_validator(mode="after")
-    def _load_redis_from_env_file(self) -> Settings:
-        """从 OS 环境变量与 .env 补齐 redis 段（嵌套模型字段不自动读取 env_file）。
+    def _parse_config(self) -> None:
+        """解析配置到具体配置对象"""
+        self.app = AppConfig(**self._config["app"])
+        self.server = ServerConfig(**self._config["server"])
+        self.logging = LoggingConfig(**self._config["logging"])
+        self.cors = CORSConfig(**self._config["cors"])
+        self.database = DatabaseConfig(**self._config["database"])
+        self.ai = AiConfig(
+            enabled=self._config["ai"]["enabled"],
+            llm=AiLLMSettings(**self._config["ai"]["llm"]),
+        )
+        self.agent = AgentConfig(**self._config["agent"])
+        self.redis = RedisConfig(**self._config["redis"])
+        self.rag = RagClientConfig(**self._config["rag"])
 
-        与 database / ai 段同因：pydantic-settings 的 env_file 不作用于嵌套模型字段。
-        优先级：OS 环境变量 > .env > 代码默认值（OS 已注入时不再用 .env 覆盖）。
-        """
-        prefix = "QINGCHUAN_AGENT_REDIS_"
-        os_values = {k: v for k, v in os.environ.items() if k.startswith(prefix)}
-        file_values = dotenv_values(QINGCHUAN_ROOT_ENV)
-        overrides: dict[str, object] = {}
-        for field in (
-            "enabled",
-            "host",
-            "port",
-            "db",
-            "username",
-            "password",
-            "ssl",
-            "url",
-            "socket_timeout",
-        ):
-            env_key = prefix + field.upper()
-            raw = os_values.get(env_key, file_values.get(env_key))
-            if raw is None:
-                continue
-            try:
-                if field in ("enabled", "ssl"):
-                    overrides[field] = str(raw).lower() in ("true", "1", "yes")
-                elif field in ("port", "db"):
-                    overrides[field] = int(raw)
-                elif field == "socket_timeout":
-                    overrides[field] = float(raw)
-                else:
-                    overrides[field] = str(raw)
-            except (ValueError, TypeError):
-                pass
-        if overrides:
-            merged = self.redis.model_dump()
-            merged.update(overrides)
-            self.redis = RedisSettings(**merged)
-        return self
+    def reload(self) -> None:
+        """重新加载配置"""
+        self._config = self._load_config()
+        self._parse_config()
+        self.validate()
 
-    # ----------------------------------------------------------
-    # 环境判断
-    # ----------------------------------------------------------
+    # === 应用信息 ===
+    @property
+    def app_env(self) -> str:
+        return self.app.env
+
+    @property
+    def service_name(self) -> str:
+        return self.app.service_name
 
     @property
     def is_development(self) -> bool:
-        return self.app_env == Environment.DEVELOPMENT.mark
+        return self.app.env == Environment.DEVELOPMENT.mark
 
     @property
     def is_production(self) -> bool:
-        return self.app_env == Environment.PRODUCTION.mark
+        return self.app.env == Environment.PRODUCTION.mark
 
-    # ----------------------------------------------------------
-    # 配置校验
-    # ----------------------------------------------------------
+    # === 服务器 ===
+    @property
+    def SERVER_HOST(self) -> str:
+        return self.server.host
 
+    @property
+    def SERVER_PORT(self) -> int:
+        return self.server.port
+
+    @property
+    def DEBUG(self) -> bool:
+        return self.server.debug
+
+    @property
+    def SERVER_WORKERS(self) -> int:
+        return self.server.workers
+
+    # === 日志 ===
+    @property
+    def LOG_LEVEL(self) -> str:
+        return self.logging.level
+
+    @property
+    def LOG_FORMAT(self) -> str:
+        return self.logging.format
+
+    @property
+    def LOG_FILE_PATH(self) -> str:
+        return self.logging.file_path
+
+    @property
+    def LOG_ROTATION(self) -> str:
+        return self.logging.rotation
+
+    @property
+    def LOG_RETENTION(self) -> str:
+        return self.logging.retention
+
+    @property
+    def LOG_COMPRESSION(self) -> str:
+        return self.logging.compression
+
+    @property
+    def LOG_CONSOLE_OUTPUT(self) -> bool:
+        return self.logging.console_output
+
+    # === CORS ===
+    @property
+    def CORS_ENABLED(self) -> bool:
+        return self.cors.enabled
+
+    @property
+    def CORS_ALLOW_ORIGINS(self) -> str:
+        if isinstance(self.cors.origins, list):
+            return ",".join(self.cors.origins)
+        return self.cors.origins
+
+    @property
+    def CORS_ALLOW_CREDENTIALS(self) -> bool:
+        return self.cors.allow_credentials
+
+    @property
+    def CORS_ALLOW_METHODS(self) -> list[str]:
+        return self.cors.allow_methods
+
+    @property
+    def CORS_ALLOW_HEADERS(self) -> list[str]:
+        return self.cors.allow_headers
+
+    # === 数据库 ===
+    @property
+    def DATABASE_ENABLED(self) -> bool:
+        return self.database.enabled
+
+    @property
+    def DATABASE_URL(self) -> str:
+        return self.database.url
+
+    # === AI / LLM ===
+    @property
+    def AI_ENABLED(self) -> bool:
+        return self.ai.enabled
+
+    @property
+    def AI_LLM_BASE_URL(self) -> str:
+        return self.ai.llm.base_url
+
+    @property
+    def AI_LLM_API_KEY(self) -> str:
+        return self.ai.llm.api_key
+
+    @property
+    def AI_LLM_MODEL(self) -> str:
+        return self.ai.llm.model
+
+    @property
+    def AI_LLM_TEMPERATURE(self) -> float:
+        return self.ai.llm.temperature
+
+    @property
+    def AI_LLM_MAX_TOKENS(self) -> int:
+        return self.ai.llm.max_tokens
+
+    @property
+    def AI_LLM_TIMEOUT_SECONDS(self) -> int:
+        return self.ai.llm.timeout_seconds
+
+    # === Agent 编排 ===
+    @property
+    def AGENT_ROUTE_MODE(self) -> str:
+        return self.agent.route_mode
+
+    @property
+    def AGENT_CHECKPOINT(self) -> str:
+        return self.agent.checkpoint
+
+    @property
+    def AGENT_CONFIDENCE_THRESHOLD(self) -> float:
+        return self.agent.confidence_threshold
+
+    @property
+    def AGENT_TASK_MAX_RETRIES(self) -> int:
+        return self.agent.task_max_retries
+
+    @property
+    def AGENT_TASK_TIMEOUT_SECONDS(self) -> int:
+        return self.agent.task_timeout_seconds
+
+    # === Redis ===
+    @property
+    def REDIS_ENABLED(self) -> bool:
+        return self.redis.enabled
+
+    @property
+    def REDIS_CONNECTION_URL(self) -> str:
+        return self.redis.connection_url
+
+    @property
+    def REDIS_SOCKET_TIMEOUT(self) -> float:
+        return self.redis.socket_timeout
+
+    # === rag-service 客户端 ===
+    @property
+    def RAG_MCP_URL(self) -> str:
+        return self.rag.mcp_url
+
+    @property
+    def RAG_HTTP_BASE_URL(self) -> str:
+        return self.rag.http_base_url
+
+    @property
+    def RAG_MCP_TIMEOUT_SECONDS(self) -> float:
+        return self.rag.mcp_timeout_seconds
+
+    # === 配置校验 ===
     def validate(self) -> None:
-        """验证配置合法性，配置错误直接阻断启动。"""
+        """验证配置合法性，配置错误直接阻断启动。
+
+        与 rag-service 的差异：agent 保留生产环境强制校验清单
+        （DEBUG / CORS / checkpoint / Redis 均为硬约束）。
+        """
         valid_modes = {mode.mark for mode in RouteMode}
         if self.agent.route_mode not in valid_modes:
             raise ValueError(
@@ -373,18 +651,15 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "生产环境（APP_ENV=production）禁止使用 memory checkpoint，请配置 redis"
                 )
-            if self.is_production and not self.redis.enabled:
+            if not self.redis.enabled:
                 raise ValueError(
                     "生产环境（APP_ENV=production）要求启用 Redis："
                     "事件总线与人工接管断点续跑均依赖 Redis"
                 )
 
 
-# ============================================================
-# 全局单例（导入即加载并校验，配置错误直接阻断启动）
-# ============================================================
+# 创建全局配置实例（导入即加载并校验，配置错误直接阻断启动）
 settings: Final[Settings] = Settings()
-settings.validate()
 
 
 def get_settings() -> Settings:
@@ -393,15 +668,16 @@ def get_settings() -> Settings:
 
 
 __all__ = [
-    "AgentSettings",
+    "AgentConfig",
+    "AiConfig",
     "AiLLMSettings",
-    "AiSettings",
-    "CorsSettings",
-    "DatabaseSettings",
-    "LoggingSettings",
-    "RagClientSettings",
-    "RedisSettings",
-    "ServerSettings",
+    "AppConfig",
+    "CORSConfig",
+    "DatabaseConfig",
+    "LoggingConfig",
+    "RagClientConfig",
+    "RedisConfig",
+    "ServerConfig",
     "Settings",
     "get_settings",
     "settings",

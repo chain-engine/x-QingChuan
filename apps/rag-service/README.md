@@ -1,8 +1,5 @@
 # 晴川 rag-service（qingchuan-rag）
 
-人社（HRSS）数据离线索引 + RAG（检索增强生成）一体化服务平台。
-人社领域知识，检索可答 —— 内置离线同步流水线，对外提供 HTTP + MCP 双协议检索与问答能力，由观海（x-GuanHai）工程改造而来。
-
 [English](README.en.md) | 中文
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
@@ -100,7 +97,7 @@ uv run qingchuan-rag-api --port 8010    # 覆盖监听端口
 uv run uvicorn qingchuan_rag.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
-**Docker 容器部署**（仓库根目录执行；向量库默认 Chroma 本地持久化，零外部依赖；如切 Milvus：先 `docker compose --profile milvus up -d` 起内置三件套并设 `VECTOR_STORE_TYPE=milvus`）：
+**Docker 容器部署**（仓库根目录执行；文档内容走内置 minio 容器；向量库默认 Chroma 本地持久化，零外部依赖；如切 Milvus：先 `docker compose --profile milvus up -d` 起内置三件套并设 `VECTOR_STORE_TYPE=milvus`）：
 
 ```bash
 docker compose up --build rag-service
@@ -109,7 +106,7 @@ docker compose up --build rag-service
 ### 🧪 6. 常用工程命令
 
 ```bash
-uv run ruff check .            # 静态代码检查（对齐 x-GuanHai 规则）
+uv run ruff check .            # 静态代码检查（规则见 pyproject.toml [tool.ruff]）
 uv run ruff format .           # 代码格式化
 uv run pytest                  # 单元 / 集成 / API 测试（tests/ 目录）
 pre-commit run --all-files     # pre-commit 钩子（ruff --fix + ruff-format）
@@ -367,7 +364,7 @@ flowchart LR
 | MySQL 8.0 | 审计日志 / 同步任务状态 | `DATABASE_URL` | 生产必需；本地可 SQLite（`sqlite:///./data/qingchuan.db`）；数据库需提前创建（`utf8mb4`） |
 | Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **默认选型**：本地持久化，零外部依赖；Milvus 可选（`uv sync --extra milvus` + `VECTOR_STORE_TYPE=milvus` + `VECTOR_STORE_MILVUS_URI`） |
 | BM25 索引 | 稀疏检索索引（增量倒排，关键词匹配） | `./data/bm25/default.json`（index_name 默认 `default`） | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘） |
-| 文档存储 | 上传的源文档 | `./data/documents` | DocumentRepository 存储路径 |
+| 文档存储 | 上传的源文档（对象存储） | `STORAGE_PROVIDER=local`（`./data/documents`）/ `s3`（`STORAGE_S3_ENDPOINT_URL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET` / `PREFIX` / `USE_SSL`） | **默认本地调试走本机 MinIO**（`http://127.0.0.1:9002`）；compose 部署走内置 minio 容器（`http://minio:9000`）；bucket 首次启动自动创建；缺 S3 凭据自动回退 local |
 | 日志文件 | loguru 文件轮转 | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | 按天轮转 / 保留 7 天 |
 
 数据结构定义（ORM 实体）：

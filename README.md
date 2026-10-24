@@ -1,8 +1,5 @@
 # 晴川（QingChuan）
 
-人社（HRSS）数据离线索引 + RAG（检索增强生成） + 人机交互的多 Agent 编排平台（当前第一期聚焦智能问答）。
-让政务领域知识可检索、可问答、可编排 —— 基于人社数据，通过 HTTP + MCP 双协议服务对外暴露，由 LangGraph 多智能体编排调度。
-
 [English](README.en.md) | 中文
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python\&logoColor=white)
@@ -54,7 +51,7 @@ uv run qingchuan-agent-api
 
 访问 <http://127.0.0.1:8020>，详见 [agent-service/README.md](apps/agent-service/README.md)。
 
-> **Docker 部署**：`docker compose up -d --build` 一次性编排 MySQL、Redis、rag-service、agent-service（内部网络互通；向量库默认 Chroma 本地持久化，零外部依赖）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020。需要 Milvus 时追加 `docker compose --profile milvus up -d`（etcd + MinIO + Milvus standalone，见 [DEPLOY.md](DEPLOY.md)）。
+> **Docker 部署**：`docker compose up -d --build` 一次性编排 MySQL、Redis、MinIO、rag-service、agent-service（内部网络互通；MinIO 承担文档内容对象存储，向量库默认 Chroma 本地持久化，零外部依赖）；宿主调试端口：MySQL 13306 / Redis 16379 / rag 8010 / agent 8020。需要 Milvus 时追加 `docker compose --profile milvus up -d`（etcd + milvus-minio + Milvus standalone，见 [DEPLOY.md](DEPLOY.md)）。
 
 ## 📁 项目结构
 
@@ -248,9 +245,9 @@ MCP 端点：`/mcp`（Streamable HTTP），工具 `retrieve_docs` / `rag_query`�
 | MySQL 8.0  | 审计日志 / 同步任务（rag）；Agent 任务 / 事件（agent，默认关闭） | rag：`DATABASE_URL`；agent：`QINGCHUAN_AGENT_DATABASE_*`                                                                                       | 本地可 SQLite（`sqlite:///./data/qingchuan.db`）；库需提前创建（`utf8mb4`）                                                                                                                                                  |
 | Redis 7    | agent checkpoint（断点续跑）/ 事件总线（跨进程广播）             | `QINGCHUAN_AGENT_REDIS_ENABLED` / `HOST` / `PORT` / `DB` / `PASSWORD`，checkpoint 经 `QINGCHUAN_AGENT_AGENT_CHECKPOINT=redis`                 | agent 侧专属；生产强制（checkpoint 必须 redis）；连接失败降级内存实现；checkpoint 与事件总线共用同一实例                                                                       |
 | Chroma 向量库 | 稠密向量索引（文档向量）                               | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **默认选型**：本地持久化，零外部依赖（单机 / 云主机直接可用）                                                                                                                                                                             |
-| Milvus 向量库 | 稠密向量索引（Milvus 形态）                          | 需安装 extras：`uv sync --extra milvus`；`VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530`                             | 可选后端；compose 内置三件套走 `docker compose --profile milvus up -d`（etcd + MinIO + Milvus standalone，数据落 milvus-data / minio-data / etcd-data 卷）；外部 Milvus 可加鉴权（`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`） |
+| Milvus 向量库 | 稠密向量索引（Milvus 形态）                          | 需安装 extras：`uv sync --extra milvus`；`VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530`                             | 可选后端；compose 内置三件套走 `docker compose --profile milvus up -d`（etcd + milvus-minio + Milvus standalone，数据落 milvus-data / milvus-minio-data / etcd-data 卷）；外部 Milvus 可加鉴权（`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`） |
 | BM25 索引    | 稀疏检索索引（增量倒排，关键词匹配）                         | `./data/bm25/default.json`（index\_name 默认 `default`）                                                                                        | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘）                                                                                                                                                              |
-| 文档存储       | rag 上传的源文档                                 | `./data/documents`                                                                                                                          | DocumentRepository 存储路径                                                                                                                                                                                        |
+| 文档存储       | rag 上传的源文档（对象存储）                       | 本地：`./data/documents`；S3/MinIO：`STORAGE_PROVIDER=s3` + `STORAGE_S3_*`（MinIO / OSS / COS / Kodo） | **默认本地调试连本机 MinIO**（`http://127.0.0.1:9002`）；compose 部署由内置 minio 容器提供（`http://minio:9000`）；bucket 首次启动自动创建；缺 S3 凭据自动回退 local |
 | 日志文件       | loguru 文件轮转                                | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days`                                                                             | 按天轮转 / 保留 7 天（agent 侧 zip 压缩）                                                                                                                                                                                  |
 
 ## 📄 许可证

@@ -18,7 +18,7 @@ class RetrievalPort(Protocol):
     async def retrieve(self, query: RetrievalQuery) -> RetrievalResponse:
         """按语义相关性返回检索片段。
 
-        TODO: 由 rag-service 内的 RetrievalAdapter 实现（内部复用观海
+        TODO: 由 rag-service 内的 RetrievalAdapter 实现（内部复用 rag-service
         三阶段检索流水线：向量 / BM25 候选 → RRF 融合 → 阈值 / MMR 重排）。
         """
         ...

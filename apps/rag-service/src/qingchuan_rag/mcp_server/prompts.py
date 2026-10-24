@@ -24,7 +24,7 @@ def register_prompts(server: MCPServer) -> None:
         def summarize_knowledge(topic: str) -> str:
             \"\"\"基于知识库总结指定主题（topic 必填）。\"\"\"
             return (
-                f"请基于观海知识库中关于「{topic}」的内容进行总结，"
+                f"请基于晴川知识库中关于「{topic}」的内容进行总结，"
                 "列出关键结论并标注引用片段。"
             )
     """

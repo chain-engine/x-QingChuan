@@ -6,7 +6,8 @@ name: x-qingchuan
 # 端口规划：
 #   - mysql  13306:3306   运维口（服务间走内部网络，如无需外部直连可去掉 ports）
 #   - redis  16379:6379   运维口（同上）
-#   - milvus 19530/9091   可选 profile（--profile milvus 启用：etcd + minio + milvus standalone；默认不启动）
+#   - minio  （默认不暴露；文档内容对象存储，内部 http://minio:9000，如需控制台可放开 9002/9003 注释）
+#   - milvus 19530/9091   可选 profile（--profile milvus 启用：etcd + milvus-minio + milvus standalone；默认不启动）
 #   - rag    8010:8010    对外服务口（阿里云安全组需放行）
 #   - agent  8020:8020    对外服务口（阿里云安全组需放行）
 #
@@ -96,7 +97,45 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Milvus 向量库（可选 profile：standalone = etcd 元数据 + minio 对象存储 + milvus 三组件）
+  # 文档内容对象存储（MinIO，默认启动；rag-service 文档内容经 STORAGE_S3_* 写入）
+  # 镜像与本地调试版一致；凭据经根 .env MINIO_ROOT_USER / MINIO_ROOT_PASSWORD 注入
+  # 内部网络访问 http://minio:9000；如需 Web 控制台运维可取消下方 ports 注释
+  minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: x-QingChuan-minio
+    command: minio server /minio_data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    # ports:
+    #   - "9002:9000"   # S3 API（可选运维口；服务间走内部网络）
+    #   - "9003:9001"   # Web 控制台（可选）
+    volumes:
+      - minio-data:/minio_data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Milvus 向量库（可选 profile：standalone = etcd 元数据 + milvus-minio 对象存储 + milvus 三组件）
   # 默认不启动（默认向量库为 Chroma，rag-service 本地持久化，零外部依赖）；
   # 需要 Milvus 时：docker compose --profile milvus up -d
   # 并设置 VECTOR_STORE_TYPE=milvus（建议先等 etcd/minio/milvus healthy 再起 rag-service）
@@ -135,16 +174,16 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  minio:
+  milvus-minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    container_name: x-QingChuan-minio
+    container_name: x-QingChuan-milvus-minio
     profiles: ["milvus"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     command: minio server /minio_data --console-address ":9001"
     volumes:
-      - minio-data:/minio_data
+      - milvus-minio-data:/minio_data
     networks:
       - backend
     healthcheck:
@@ -175,14 +214,14 @@ services:
     command: ["milvus", "run", "standalone"]
     environment:
       ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
+      MINIO_ADDRESS: milvus-minio:9000
     volumes:
       - milvus-data:/var/lib/milvus
     networks:
       - backend
     depends_on:
       - etcd
-      - minio
+      - milvus-minio
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
       interval: 30s
@@ -230,6 +269,16 @@ services:
       VECTOR_STORE_COLLECTION_NAME: ${VECTOR_STORE_COLLECTION_NAME:-documents}
       VECTOR_STORE_DISTANCE: ${VECTOR_STORE_DISTANCE:-cosine}
       VECTOR_STORE_DIMENSION: ${VECTOR_STORE_DIMENSION:-1024}
+      # 文档内容对象存储 → compose 内置 minio（内部网络；bucket 首次启动自动创建）
+      STORAGE_PROVIDER: s3
+      STORAGE_S3_ENDPOINT_URL: http://minio:9000
+      STORAGE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      STORAGE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      STORAGE_S3_BUCKET: ${MINIO_BUCKET:-qingchuan}
+      STORAGE_S3_REGION: ""
+      STORAGE_S3_PREFIX: documents
+      STORAGE_S3_PUBLIC_URL: ""
+      STORAGE_S3_USE_SSL: "false"
       # 业务数据库（审计 / 同步任务 / 文档元数据）→ compose 内部 mysql；首次启动自动建表（幂等）
       DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-qingchuan}?charset=utf8mb4
       # 人社数据源与周期调度（生产按需开启）
@@ -247,8 +296,10 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      minio:
+        condition: service_healthy
       # 注：默认不依赖 Milvus（默认 Chroma）。--profile milvus 模式下，
-      # 建议先 `docker compose --profile milvus up -d etcd minio milvus` 等 healthy，
+      # 建议先 `docker compose --profile milvus up -d etcd milvus-minio milvus` 等 healthy，
       # 再 `docker compose --profile milvus up -d`（或整体 up 后按日志确认）。
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request, socket; socket.setdefaulttimeout(3); urllib.request.urlopen('http://localhost:8010/api/v1/health')"]
@@ -343,9 +394,10 @@ services:
 volumes:
   mysql-data:
   redis-data:
+  minio-data:                        # 文档内容对象存储（MinIO）
   # Milvus profile 专用卷（默认 Chroma 不启用）
   etcd-data:
-  minio-data:
+  milvus-minio-data:
   milvus-data:
   rag-data:
   agent-logs:
