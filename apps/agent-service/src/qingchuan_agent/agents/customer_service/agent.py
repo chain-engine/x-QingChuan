@@ -1,6 +1,6 @@
 """问答（客服）Agent（晴川 x-QingChuan，agents/customer_service）。
 
-由早期 Agent A（RAG 问答）更名而来：agent_type=customer_service，
+由早期 RAG 问答 Agent 更名而来：agent_type=customer_service，
 task_type 同步使用新 mark。职责：检索人社 / 社保知识库并生成回答。
 """
 

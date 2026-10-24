@@ -32,7 +32,7 @@
 - **packages/domain（qingchuan-domain）**：实体 / Schema / 检索协议 / 端口的唯一事实来源，两个服务直接引用；
 - **packages/common（qingchuan-common）**：跨服务共享组件（MCP 客户端封装 / 认证 / 审计 / 可观测性，占位）。
 
-**当前状态**：第一期聚焦智能问答——RAG 检索问答链路已端到端跑通（人社同步支持 mock 数据联调，Agent A 问答链路已闭环）；BM25 采用自研增量倒排索引，文本切分支持 recursive / semantic 等策略；Agent 编排骨架已交付（新业务 Agent 注册即可扩展），任务 / 事件持久化默认关闭，无数据库也可启动服务。
+**当前状态**：第一期聚焦智能问答——RAG 检索问答链路已端到端跑通（人社同步支持 mock 数据联调，问答（客服）Agent 链路已闭环）；BM25 采用自研增量倒排索引，文本切分支持 recursive / semantic 等策略；Agent 编排骨架已交付（新业务 Agent 注册即可扩展），任务 / 事件持久化默认关闭，无数据库也可启动服务。
 
 ## 🚀 快速开始
 

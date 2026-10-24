@@ -31,7 +31,7 @@
 - **任务状态机**：提交 → 路由 → 执行 → 聚合 → 落库 / 回写，支持重试（默认 3 次）与超时（默认 300 秒）；
 - **持久化可选**：任务 / 事件持久化默认关闭（`QINGCHUAN_AGENT_DATABASE_ENABLED=false`），无数据库也可启动。
 
-**当前状态**：编排骨架已交付；Agent A（RAG 问答）链路已闭环 —— `agent_a.answer` → 工具注册中心 `rag.retrieve` → rag-service `/mcp` → LLM 生成（未配 Key 时走 Mock 并标注）。新业务 Agent 在 `agents/` 目录注册即可扩展。
+**当前状态**：编排骨架已交付；问答（客服）Agent 链路已闭环 —— `answer` 节点 → 工具注册中心 `rag.retrieve` → rag-service `/mcp` → LLM 生成（未配 Key 时走 Mock 并标注）。新业务 Agent 在 `agents/` 目录注册即可扩展。
 
 ## 🚀 快速开始
 
@@ -117,7 +117,7 @@ uv audit                       # 依赖漏洞扫描（uv 0.5+ 内置）
 ```bash
 curl -X POST http://127.0.0.1:8020/api/v1/tasks \
   -H "Content-Type: application/json" \
-  -d '{"task_type": "agent_a", "payload": {"query": "医保缴费记录如何查询？"}}'
+  -d '{"task_type": "customer_service", "payload": {"query": "医保缴费记录如何查询？"}}'
 ```
 
 **提交任务（留空 → LLM 动态路由）**：
@@ -160,7 +160,7 @@ apps/agent-service/
 │   ├── repositories/           # 数据访问层（agent_task / agent_event 仓储）
 │   ├── models/entities/        # ORM 实体（agent_task / agent_event）
 │   ├── schemas/                # 请求 / 响应 Schema（ApiResponse / Page 包装）
-│   ├── agents/                 # 编排层（orchestrator / registry / runtime / base / state / routing / tools / agent_a）
+│   ├── agents/                 # 编排层（orchestrator / registry / runtime / base / state / routing / tools / customer_service）
 │   ├── infras/                 # 基础设施（database / llm / rag_mcp / event_bus）
 │   ├── core/                   # 核心基础设施（config / logger / exceptions / middleware）
 │   ├── constants/              # 常量与枚举（路由模式 / 任务状态 / API 前缀）
@@ -219,7 +219,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     START["提交任务"] --> ROUTE["route 节点<br/>(RouteResolver：explicit / llm / hybrid)"]
-    ROUTE -->|"条件边按 target_agent 分发"| SUB["业务子图节点<br/>(如 agent_a：MCP 检索 → LLM 生成)"]
+    ROUTE -->|"条件边按 target_agent 分发"| SUB["业务子图节点<br/>(如 customer_service：MCP 检索 → LLM 生成)"]
     SUB --> AGG["aggregate 节点<br/>(合并事件与结果)"]
     AGG --> END["返回任务结果"]
     ROUTE -->|"未注册 / 路由失败"| FAIL["任务失败<br/>(回写 error_message)"]
@@ -228,11 +228,11 @@ flowchart LR
     WAIT --> SUB
 ```
 
-**Agent A（RAG 问答）子图链路**：
+**问答（客服）Agent 子图链路**：
 
 ```mermaid
 flowchart LR
-    N["agent_a.answer 节点"] --> T["工具注册中心<br/>tool_registry.invoke('rag.retrieve')"]
+    N["answer 节点<br/>(问答（客服）Agent)"] --> T["工具注册中心<br/>tool_registry.invoke('rag.retrieve')"]
     T --> M["RagMCPClient<br/>(qingchuan_common.mcp)"]
     M --> R["rag-service /mcp<br/>(streamable HTTP retrieve_docs)"]
     R --> C["命中片段组装上下文"]

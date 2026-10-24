@@ -31,7 +31,7 @@ The **human-interactive multi-agent orchestration platform** (LangGraph orchestr
 - **Task state machine**: submit → route → execute → aggregate → persist / write back, with retries (default 3) and timeout (default 300 s);
 - **Optional persistence**: task / event persistence is disabled by default (`QINGCHUAN_AGENT_DATABASE_ENABLED=false`), so the service starts without a database.
 
-**Current status**: orchestration skeleton delivered; Agent A (RAG Q&A) chain is closed loop — `agent_a.answer` → tool registry `rag.retrieve` → rag-service `/mcp` → LLM generation (Mock with a marker when no API key is configured). New business agents extend via registration under `agents/`.
+**Current status**: orchestration skeleton delivered; Q&A (Customer Service) Agent chain is closed loop — `answer` node → tool registry `rag.retrieve` → rag-service `/mcp` → LLM generation (Mock with a marker when no API key is configured). New business agents extend via registration under `agents/`.
 
 ## 🚀 Quick Start
 
@@ -117,7 +117,7 @@ uv audit                       # dependency vulnerability scan (built into uv 0.
 ```bash
 curl -X POST http://127.0.0.1:8020/api/v1/tasks \
   -H "Content-Type: application/json" \
-  -d '{"task_type": "agent_a", "payload": {"query": "How can I check my medical insurance payment records?"}}'
+  -d '{"task_type": "customer_service", "payload": {"query": "How can I check my medical insurance payment records?"}}'
 ```
 
 **Submit a task (empty task_type → LLM dynamic routing)**:
@@ -228,11 +228,11 @@ flowchart LR
     WAIT --> SUB
 ```
 
-**Agent A (RAG Q&A) subgraph chain**:
+**Q&A (Customer Service) Agent subgraph chain**:
 
 ```mermaid
 flowchart LR
-    N["agent_a.answer node"] --> T["Tool registry<br/>tool_registry.invoke('rag.retrieve')"]
+    N["answer node<br/>(Q&A (Customer Service) Agent)"] --> T["Tool registry<br/>tool_registry.invoke('rag.retrieve')"]
     T --> M["RagMCPClient<br/>(qingchuan_common.mcp)"]
     M --> R["rag-service /mcp<br/>(streamable HTTP retrieve_docs)"]
     R --> C["Assemble context from hits"]

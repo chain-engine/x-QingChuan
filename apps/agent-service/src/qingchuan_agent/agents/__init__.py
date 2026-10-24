@@ -14,7 +14,7 @@
 
 业务层（编排单元，五大分类，目录结构保持一致）：
     content/           内容创作 Agent（选题 → 生成 → 审核）
-    customer_service/  问答（客服）Agent（原 Agent A 更名：检索 → 生成）
+    customer_service/  问答（客服）Agent（原问答 Agent 更名：检索 → 生成）
     security/          安全 Agent（采集 → 风险分析 → 告警）
     data_analysis/     数据分析 Agent（取数 → 分析 → 报告）
     data_monitor/      数据监控 Agent（查询 → 判定 → 通知）

@@ -32,7 +32,7 @@ QingChuan is a **data offline indexing + RAG retrieval-augmented generation + hu
 - **packages/domain（qingchuan-domain）**: single source of truth for entities / schemas / retrieval protocols / ports, referenced directly by both services;
 - **packages/common（qingchuan-common）**: cross-service shared components (MCP client wrapper / auth / audit / observability, placeholder).
 
-**Current status**: Phase 1 focuses on intelligent Q&A — the RAG retrieval & Q&A chain runs end-to-end (HRSS sync supports mock integration and the Agent A Q&A chain is closed loop); BM25 uses a self-built incremental inverted index and text chunking supports recursive / semantic strategies; the Agent orchestration skeleton is delivered (new business agents extend via registration), and task/event persistence is disabled by default so the service can start without a database.
+**Current status**: Phase 1 focuses on intelligent Q&A — the RAG retrieval & Q&A chain runs end-to-end (HRSS sync supports mock integration and the Q&A (Customer Service) Agent chain is closed loop); BM25 uses a self-built incremental inverted index and text chunking supports recursive / semantic strategies; the Agent orchestration skeleton is delivered (new business agents extend via registration), and task/event persistence is disabled by default so the service can start without a database.
 
 ## 🚀 Quick Start
 

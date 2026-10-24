@@ -27,14 +27,14 @@ async def test_in_memory_publish_subscribe():
         EventMessage(
             event_type="agent.task.completed",
             payload={"task_id": 1},
-            source_agent="agent_a",
+            source_agent="customer_service",
             target_agent="agent_b",
         )
     )
     assert len(received) == 1
     assert received[0].event_type == "agent.task.completed"
     assert received[0].payload == {"task_id": 1}
-    assert received[0].source_agent == "agent_a"
+    assert received[0].source_agent == "customer_service"
     assert received[0].target_agent == "agent_b"
 
 
@@ -126,7 +126,7 @@ async def test_redis_event_bus_roundtrip():
             EventMessage(
                 event_type="agent.task.completed",
                 payload={"task_id": 7},
-                source_agent="agent_a",
+                source_agent="customer_service",
             )
         )
         for _ in range(50):
@@ -136,7 +136,7 @@ async def test_redis_event_bus_roundtrip():
         assert len(received) == 1
         assert received[0].event_type == "agent.task.completed"
         assert received[0].payload == {"task_id": 7}
-        assert received[0].source_agent == "agent_a"
+        assert received[0].source_agent == "customer_service"
     finally:
         await bus.stop()
         await client.aclose()

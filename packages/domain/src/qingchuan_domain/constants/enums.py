@@ -38,7 +38,7 @@ class Environment(StrBaseEnum):
 class AgentType(StrBaseEnum):
     """Agent 类型（业务 Agent 五大分类，mark 同时作为 agent_tasks.task_type 入库值）。
 
-    由早期单一 AGENT_A（RAG 问答）演进为五分类；原问答 Agent 更名为
+    由早期单一问答 Agent 演进为五分类；原问答 Agent 更名为
     CUSTOMER_SERVICE（customer_service），task_type 同步使用新 mark。
     """
 

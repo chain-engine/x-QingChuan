@@ -124,7 +124,7 @@ class AgentRegistry:
 
 agent_registry: AgentRegistry = AgentRegistry()
 
-# 说明：骨架当前仅注册 Agent A（RAG 问答，占位）；后续面向湖北省人社
+# 说明：骨架当前仅注册问答（客服）Agent（占位）；后续面向湖北省人社
 # 平台的新 Agent 在此 register 即可扩展（子图在首次被路由时惰性编译）。
 
 __all__ = ["AgentRegistry", "AgentSpec", "agent_registry"]
