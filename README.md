@@ -5,17 +5,17 @@
 
 [English](README.en.md) | 中文
 
-![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python\&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi\&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-1C3C3C)
-![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-1C3C3C?logo=langchain&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-1C3C3C?logo=langchain\&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-2.3%2B-24292F)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4%2B-F97316)
 ![BM25](https://img.shields.io/badge/BM25-Incremental%20Index-2C3E50)
-![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-D71F00?logo=sqlalchemy\&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql\&logoColor=white)
 ![APScheduler](https://img.shields.io/badge/APScheduler-3.10%2B-2C3E50)
-![Docker](https://img.shields.io/badge/Docker-24.0%2B-2496ED?logo=docker&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-24.0%2B-2496ED?logo=docker\&logoColor=white)
 ![uv](https://img.shields.io/badge/uv-0.5%2B-6E40C9)
 
 ![Stars](https://img.shields.io/github/stars/chain-engine/x-QingChuan?label=Stars)
@@ -108,59 +108,18 @@ x-QingChuan/
 ├── .env                                # 环境配置（不入库）
 ├── .pre-commit-config.yaml             # pre-commit 钩子（ruff）
 ├── LICENSE                             # MIT 许可证
+├── me/                                 # 系统架构图（architecture.svg 中文 / architecture.en.svg 英文）
 ├── README.md / README.en.md            # 中英双语文档
 └── uv.lock                             # 依赖锁文件
 ```
 
 ## 🏗️ 系统架构
 
-### 🧱 分层架构
+### 🧱 系统分层架构
 
-```mermaid
-flowchart TB
-    subgraph CLIENTS["客户端"]
-        A1["HTTP 客户端（REST）"]
-        A2["MCP 客户端（Agent / IDE / 工具）"]
-    end
+![系统分层架构](./me/architecture.svg)
 
-    subgraph AGENT["agent-service（qingchuan-agent，:8020）"]
-        B1["API 层（/api/v1）"]
-        B2["服务层（services/）"]
-        B3["Agent 编排层（agents/）"]
-        B4["数据访问层（repositories/）"]
-    end
-
-    subgraph RAG["rag-service（qingchuan-rag，:8010）"]
-        C1["HTTP 网关（/api/v1）"]
-        C2["MCP 网关（/mcp）"]
-        C3["服务层（services/）"]
-        C4["仓储层（repositories/）"]
-    end
-
-    subgraph INFRA["基础设施"]
-        D1[("MySQL 业务库")]
-        D2[("Chroma 向量库")]
-        D3[("BM25 稀疏索引")]
-        D4["LLM Provider（OpenAI 兼容）"]
-        D5["人社数据源（API）"]
-    end
-
-    A1 --> B1
-    A2 --> C2
-    B1 --> B2
-    B2 --> B3
-    B3 -- "MCP 工具调用" --> C2
-    B3 --> B4
-    B4 --> D1
-    C1 --> C3
-    C2 --> C3
-    C3 --> C4
-    C4 --> D1
-    C4 --> D2
-    C4 --> D3
-    C3 --> D4
-    C3 -. "离线同步" .-> D5
-```
+> 分层架构图（中文版）：客户端 → 服务层（agent-service / rag-service）→ 基础设施（MySQL / Redis / Milvus / BM25 / LLM / 人社源）
 
 ### 🔄 核心业务流程
 
@@ -200,81 +159,82 @@ flowchart LR
 
 ### 🔩 关键技术组件
 
-| 模块 | 组件 | 说明 |
-| --- | --- | --- |
-| Web 框架 | FastAPI + Uvicorn | 两个服务的 HTTP 网关，统一响应包装与异常处理 |
-| Agent 编排 | LangGraph | 顶层编排图 + 嵌套业务子图，interrupt / resume |
-| 注册 / 路由 | AgentRegistry | task_type → AgentSpec 映射表路由，惰性编译缓存 |
-| LLM 接入 | LangChain（OpenAI 兼容） | DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo |
-| MCP | mcp 2.3+ | rag-service Streamable HTTP（/mcp）；agent 经 MCP 客户端调用 |
-| 向量检索 | ChromaDB（可选 Milvus）+ sentence-transformers（BAAI/bge-m3） | 稠密索引，持久化于 `data/chroma` |
-| 稀疏检索 | BM25IndexStore（自研增量倒排） | 倒排表 + Okapi BM25 打分，增删 O(词数) 增量维护，与向量检索混合；rank-bm25 仅一致性对比与备用路径 |
-| 业务库 | SQLAlchemy 2 + PyMySQL（MySQL 8） | 审计日志 / 同步任务 / Agent 任务与事件 |
-| 周期调度 | APScheduler | 人社同步 cron（默认每日 03:00） |
-| 配置 | pydantic-settings / pydantic + PyYAML | 分段带前缀配置；非法配置阻断启动 |
-| 日志 | loguru | 彩色控制台 / 文件轮转（1 天 / 保留 7 天） |
-| 工程化 | uv + ruff + pre-commit + pytest | 工作区依赖、静态检查、测试 |
-| 部署 | Docker Compose | 一键独立部署 MySQL + Redis + 双服务（内部网络，不依赖宿主机） |
+| 模块       | 组件                                                                                               | 说明                                                                     |
+| -------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Web 框架   | FastAPI + Uvicorn                                                                                | 两个服务的 HTTP 网关，统一响应包装与异常处理                                              |
+| Agent 编排 | LangGraph                                                                                        | 顶层编排图 + 嵌套业务子图，interrupt / resume                                      |
+| 注册 / 路由  | AgentRegistry                                                                                    | task\_type → AgentSpec 映射表路由，惰性编译缓存                                    |
+| LLM 接入   | LangChain（OpenAI 兼容）                                                                             | DeepSeek / 豆包 / 阿里云百炼 / 小米 MiMo                                        |
+| MCP      | mcp 2.3+                                                                                         | rag-service Streamable HTTP（/mcp）；agent 经 MCP 客户端调用                    |
+| 向量检索     | Milvus（standalone：etcd + MinIO，compose 内置）/ ChromaDB（本地开发默认）+ sentence-transformers（BAAI/bge-m3） | 稠密索引；部署连 `http://milvus:19530`，本地开发持久化于 `data/chroma`                  |
+| 稀疏检索     | BM25IndexStore（自研增量倒排）                                                                           | 倒排表 + Okapi BM25 打分，增删 O(词数) 增量维护，与向量检索混合；rank-bm25 仅一致性对比与备用路径        |
+| 业务库      | SQLAlchemy 2 + PyMySQL（MySQL 8）                                                                  | 审计日志 / 同步任务 / Agent 任务与事件                                              |
+| 缓存 / 状态  | Redis 7                                                                                          | agent checkpoint（生产强制 redis）+ 事件总线                                     |
+| 周期调度     | APScheduler                                                                                      | 人社同步 cron（默认每日 03:00）                                                  |
+| 配置       | pydantic-settings / pydantic + PyYAML                                                            | 分段带前缀配置；非法配置阻断启动                                                       |
+| 日志       | loguru                                                                                           | 彩色控制台 / 文件轮转（1 天 / 保留 7 天）                                             |
+| 工程化      | uv + ruff + pre-commit + pytest                                                                  | 工作区依赖、静态检查、测试                                                          |
+| 部署       | Docker Compose                                                                                   | 一键独立部署 MySQL + Redis + Milvus（etcd+MinIO+standalone）+ 双服务（内部网络，不依赖宿主机） |
 
 ## 🛠️ 技术栈
 
-| 分类 | 选型 |
-| --- | --- |
-| 开发语言 | Python 3.12+ |
-| Web 框架 | FastAPI 0.115+ / Uvicorn 0.30+ |
-| Agent 编排 | LangGraph 0.2+（顶层图 + 业务子图，interrupt / resume） |
-| LLM 接入 | LangChain（langchain-core 0.3+ / langchain-openai 0.2+，OpenAI 兼容协议） |
-| MCP | mcp 2.3+（Streamable HTTP） |
-| 向量数据库 | ChromaDB 0.4+（可选 Milvus 2.x / milvus-lite） |
-| 向量嵌入 | sentence-transformers 5.7+（BAAI/bge-m3） |
-| 稀疏检索 | 自研 BM25 增量倒排（rank-bm25 0.2+ 备用 / 对比） |
-| 文本切分 | langchain-text-splitters 1.1+ / llama-index-core 0.14+ / 自研 SemanticSplitter |
-| 业务数据库 | MySQL 8.0（SQLAlchemy 2 + PyMySQL；本地可 SQLite） |
-| 周期调度 | APScheduler 3.10+ |
-| 配置管理 | pydantic-settings 2.5+ / pydantic 2.9+ / PyYAML |
-| 日志 | loguru 0.7+ |
-| 包管理 | uv（工作区：apps/* + packages/*，uv.lock） |
-| 工程化 | ruff + pre-commit + pytest（pytest-asyncio / pytest-cov） |
-| 部署 | Docker / Docker Compose |
+| 分类       | 选型                                                                           |
+| -------- | ---------------------------------------------------------------------------- |
+| 开发语言     | Python 3.12+                                                                 |
+| Web 框架   | FastAPI 0.115+ / Uvicorn 0.30+                                               |
+| Agent 编排 | LangGraph 0.2+（顶层图 + 业务子图，interrupt / resume）                                |
+| LLM 接入   | LangChain（langchain-core 0.3+ / langchain-openai 0.2+，OpenAI 兼容协议）           |
+| MCP      | mcp 2.3+（Streamable HTTP）                                                    |
+| 向量数据库    | ChromaDB 0.4+（可选 Milvus 2.x / milvus-lite）                                   |
+| 向量嵌入     | sentence-transformers 5.7+（BAAI/bge-m3）                                      |
+| 稀疏检索     | 自研 BM25 增量倒排（rank-bm25 0.2+ 备用 / 对比）                                         |
+| 文本切分     | langchain-text-splitters 1.1+ / llama-index-core 0.14+ / 自研 SemanticSplitter |
+| 业务数据库    | MySQL 8.0（SQLAlchemy 2 + PyMySQL；本地可 SQLite）                                 |
+| 周期调度     | APScheduler 3.10+                                                            |
+| 配置管理     | pydantic-settings 2.5+ / pydantic 2.9+ / PyYAML                              |
+| 日志       | loguru 0.7+                                                                  |
+| 包管理      | uv（工作区：apps/\* + packages/\*，uv.lock）                                        |
+| 工程化      | ruff + pre-commit + pytest（pytest-asyncio / pytest-cov）                      |
+| 部署       | Docker / Docker Compose                                                      |
 
 ## 📡 API 文档说明
 
 两个服务均开启 **Swagger 交互式文档 / ReDoc 只读文档 / OpenAPI JSON**：
 
-| 服务 | Swagger | ReDoc | OpenAPI JSON |
-| --- | --- | --- | --- |
-| rag-service（:8010） | <http://127.0.0.1:8010/docs> | <http://127.0.0.1:8010/redoc> | <http://127.0.0.1:8010/openapi.json> |
+| 服务                   | Swagger                      | ReDoc                         | OpenAPI JSON                         |
+| -------------------- | ---------------------------- | ----------------------------- | ------------------------------------ |
+| rag-service（:8010）   | <http://127.0.0.1:8010/docs> | <http://127.0.0.1:8010/redoc> | <http://127.0.0.1:8010/openapi.json> |
 | agent-service（:8020） | <http://127.0.0.1:8020/docs> | <http://127.0.0.1:8020/redoc> | <http://127.0.0.1:8020/openapi.json> |
 
 ### 📋 核心 API 接口清单
 
 **rag-service（/api/v1）**：
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/v1/health` / `/api/v1/version` / `/api/v1/status` | 健康检查 / 版本 / 运行状态 |
-| POST | `/api/v1/rag/query` | RAG 问答（检索 + 生成，支持 top_k / 阈值 / MMR / 元数据过滤 / 指定 provider） |
-| POST | `/api/v1/rag/retrieve` / `/api/v1/rag/embed` | 仅检索不生成 / 文本向量化 |
-| POST | `/api/v1/documents/upload` | 上传文档并自动索引（UTF-8 / GBK 编码） |
-| GET | `/api/v1/documents` | 文档列表（分页，可按状态 / 类型过滤） |
-| GET / DELETE | `/api/v1/documents/{document_id}` | 文档详情 / 删除文档及其向量 |
-| POST | `/api/v1/sync/trigger` | 触发人社同步（`full=true` 全量，`force=true` 强制重跑） |
-| GET | `/api/v1/sync/status` | 最近一次同步状态 |
-| GET | `/api/v1/audit/logs` | 审计日志列表（按实体 / 操作 / 操作者 / 时间范围 / 关键字分页） |
+| 方法           | 路径                                                      | 说明                                                         |
+| ------------ | ------------------------------------------------------- | ---------------------------------------------------------- |
+| GET          | `/api/v1/health` / `/api/v1/version` / `/api/v1/status` | 健康检查 / 版本 / 运行状态                                           |
+| POST         | `/api/v1/rag/query`                                     | RAG 问答（检索 + 生成，支持 top\_k / 阈值 / MMR / 元数据过滤 / 指定 provider） |
+| POST         | `/api/v1/rag/retrieve` / `/api/v1/rag/embed`            | 仅检索不生成 / 文本向量化                                             |
+| POST         | `/api/v1/documents/upload`                              | 上传文档并自动索引（UTF-8 / GBK 编码）                                  |
+| GET          | `/api/v1/documents`                                     | 文档列表（分页，可按状态 / 类型过滤）                                       |
+| GET / DELETE | `/api/v1/documents/{document_id}`                       | 文档详情 / 删除文档及其向量                                            |
+| POST         | `/api/v1/sync/trigger`                                  | 触发人社同步（`full=true` 全量，`force=true` 强制重跑）                   |
+| GET          | `/api/v1/sync/status`                                   | 最近一次同步状态                                                   |
+| GET          | `/api/v1/audit/logs`                                    | 审计日志列表（按实体 / 操作 / 操作者 / 时间范围 / 关键字分页）                      |
 
 MCP 端点：`/mcp`（Streamable HTTP），工具 `retrieve_docs` / `rag_query`（只读）。
 
 **agent-service（/api/v1）**：
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/v1/health` / `/api/v1/version` | 健康检查（含 DB / Agent 运行时状态）/ 版本信息 |
-| GET | `/api/v1/agents/specs` | 已注册 Agent 规格列表 |
-| POST | `/api/v1/tasks` | 提交 Agent 任务（显式 task_type 直接路由；留空 → LLM 动态路由） |
-| GET | `/api/v1/tasks` | 任务列表（分页，可按状态 / 类型过滤） |
-| GET | `/api/v1/tasks/{task_id}` | 任务详情 |
-| POST | `/api/v1/tasks/{task_id}/resume` | 人工接管：恢复被中断的任务 |
-| GET | `/api/v1/events` / `/api/v1/events/{event_id}` | 协作事件列表 / 详情 |
+| 方法   | 路径                                             | 说明                                            |
+| ---- | ---------------------------------------------- | --------------------------------------------- |
+| GET  | `/api/v1/health` / `/api/v1/version`           | 健康检查（含 DB / Agent 运行时状态）/ 版本信息                |
+| GET  | `/api/v1/agents/specs`                         | 已注册 Agent 规格列表                                |
+| POST | `/api/v1/tasks`                                | 提交 Agent 任务（显式 task\_type 直接路由；留空 → LLM 动态路由） |
+| GET  | `/api/v1/tasks`                                | 任务列表（分页，可按状态 / 类型过滤）                          |
+| GET  | `/api/v1/tasks/{task_id}`                      | 任务详情                                          |
+| POST | `/api/v1/tasks/{task_id}/resume`               | 人工接管：恢复被中断的任务                                 |
+| GET  | `/api/v1/events` / `/api/v1/events/{event_id}` | 协作事件列表 / 详情                                   |
 
 ### 🔐 权限与访问控制
 
@@ -283,14 +243,14 @@ MCP 端点：`/mcp`（Streamable HTTP），工具 `retrieve_docs` / `rag_query`�
 
 ## 💾 存储配置说明
 
-| 存储 | 用途 | 配置参数 | 备注 |
-| --- | --- | --- | --- |
-| MySQL 8.0 | 审计日志 / 同步任务（rag）；Agent 任务 / 事件（agent，默认关闭） | rag：`DATABASE_URL`；agent：`QINGCHUAN_AGENT_DATABASE_*` | 本地可 SQLite（`sqlite:///./data/qingchuan.db`）；库需提前创建（`utf8mb4`） |
-| Chroma 向量库 | 稠密向量索引（文档向量） | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **默认选型**：本地持久化，零外部依赖（单机 / 云主机直接可用） |
-| Milvus 向量库 | 稠密向量索引（Milvus 形态） | 需安装 extras：`uv sync --extra milvus`；`VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530` | 可选后端；compose 内置三件套走 `docker compose --profile milvus up -d`（etcd + MinIO + Milvus standalone，数据落 milvus-data / minio-data / etcd-data 卷）；外部 Milvus 可加鉴权（`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`） |
-| BM25 索引 | 稀疏检索索引（增量倒排，关键词匹配） | `./data/bm25/default.json`（index_name 默认 `default`） | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘） |
-| 文档存储 | rag 上传的源文档 | `./data/documents` | DocumentRepository 存储路径 |
-| 日志文件 | loguru 文件轮转 | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days` | 按天轮转 / 保留 7 天（agent 侧 zip 压缩） |
+| 存储         | 用途                                         | 配置参数                                                                                                                                        | 备注                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MySQL 8.0  | 审计日志 / 同步任务（rag）；Agent 任务 / 事件（agent，默认关闭） | rag：`DATABASE_URL`；agent：`QINGCHUAN_AGENT_DATABASE_*`                                                                                       | 本地可 SQLite（`sqlite:///./data/qingchuan.db`）；库需提前创建（`utf8mb4`）                                                                                                                                                  |
+| Chroma 向量库 | 稠密向量索引（文档向量）                               | `VECTOR_STORE_TYPE=chroma`、`VECTOR_STORE_PERSIST_DIR=./data/chroma`、`VECTOR_STORE_COLLECTION_NAME=documents`、`VECTOR_STORE_DISTANCE=cosine` | **默认选型**：本地持久化，零外部依赖（单机 / 云主机直接可用）                                                                                                                                                                             |
+| Milvus 向量库 | 稠密向量索引（Milvus 形态）                          | 需安装 extras：`uv sync --extra milvus`；`VECTOR_STORE_TYPE=milvus`、`VECTOR_STORE_MILVUS_URI=http://localhost:19530`                             | 可选后端；compose 内置三件套走 `docker compose --profile milvus up -d`（etcd + MinIO + Milvus standalone，数据落 milvus-data / minio-data / etcd-data 卷）；外部 Milvus 可加鉴权（`VECTOR_STORE_MILVUS_TOKEN` / `USERNAME` / `PASSWORD`） |
+| BM25 索引    | 稀疏检索索引（增量倒排，关键词匹配）                         | `./data/bm25/default.json`（index\_name 默认 `default`）                                                                                        | 增删 O(词数) 增量维护；快照式落盘（默认每 50 次变更落盘一次 + shutdown 落盘）                                                                                                                                                              |
+| 文档存储       | rag 上传的源文档                                 | `./data/documents`                                                                                                                          | DocumentRepository 存储路径                                                                                                                                                                                        |
+| 日志文件       | loguru 文件轮转                                | `LOG_FILE_PATH` / `LOG_ROTATION=1 day` / `LOG_RETENTION=7 days`                                                                             | 按天轮转 / 保留 7 天（agent 侧 zip 压缩）                                                                                                                                                                                  |
 
 ## 📄 许可证
 
@@ -317,7 +277,8 @@ MCP 端点：`/mcp`（Streamable HTTP），工具 `retrieve_docs` / `rag_query`�
 ## 📮 联系方式
 
 - **作者**：John Young（夜雨诗来）
-- **邮箱**：john.young@foxmail.com
+- **邮箱**：<john.young@foxmail.com>
 - **Gitee**：<https://gitee.com/yeyushilai>
 - **GitHub**：<https://github.com/yeyushilai>
 - **项目地址**：<https://github.com/chain-engine/x-QingChuan>
+

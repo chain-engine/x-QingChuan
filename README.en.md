@@ -108,6 +108,7 @@ x-QingChuan/
 ├── .env                                # Environment config (not committed)
 ├── .pre-commit-config.yaml             # pre-commit hooks (ruff)
 ├── LICENSE                             # MIT License
+├── me/                                 # Architecture diagrams (architecture.svg CN / architecture.en.svg EN)
 ├── README.md / README.en.md            # Bilingual documentation
 └── uv.lock                             # Dependency lockfile
 ```
@@ -116,51 +117,9 @@ x-QingChuan/
 
 ### 🧱 Layered Architecture
 
-```mermaid
-flowchart TB
-    subgraph CLIENTS["Clients"]
-        A1["HTTP Clients (REST)"]
-        A2["MCP Clients (Agent / IDE / Tools)"]
-    end
+![System Layered Architecture](./me/architecture.en.svg)
 
-    subgraph AGENT["agent-service (qingchuan-agent, :8020)"]
-        B1["API Layer (/api/v1)"]
-        B2["Service Layer (services/)"]
-        B3["Agent Orchestration Layer (agents/)"]
-        B4["Data Access Layer (repositories/)"]
-    end
-
-    subgraph RAG["rag-service (qingchuan-rag, :8010)"]
-        C1["HTTP Gateway (/api/v1)"]
-        C2["MCP Gateway (/mcp)"]
-        C3["Service Layer (services/)"]
-        C4["Repository Layer (repositories/)"]
-    end
-
-    subgraph INFRA["Infrastructure"]
-        D1[("MySQL Business DB")]
-        D2[("Chroma Vector Store")]
-        D3[("BM25 Sparse Index")]
-        D4["LLM Provider (OpenAI-compatible)"]
-        D5["HRSS Data Source (API)"]
-    end
-
-    A1 --> B1
-    A2 --> C2
-    B1 --> B2
-    B2 --> B3
-    B3 -- "MCP tool call" --> C2
-    B3 --> B4
-    B4 --> D1
-    C1 --> C3
-    C2 --> C3
-    C3 --> C4
-    C4 --> D1
-    C4 --> D2
-    C4 --> D3
-    C3 --> D4
-    C3 -. "offline sync" .-> D5
-```
+> Layered architecture diagram (English): clients → service layer (agent-service / rag-service) → infrastructure (MySQL / Redis / Milvus / BM25 / LLM / HRSS source); Chinese version at [architecture.svg](me/architecture.svg).
 
 ### 🔄 Core Business Flows
 
@@ -207,14 +166,15 @@ flowchart LR
 | Registration / routing | AgentRegistry | task_type → AgentSpec mapping-table routing, lazy compile cache |
 | LLM access | LangChain (OpenAI-compatible) | DeepSeek / Doubao / Aliyun Bailian / Xiaomi MiMo |
 | MCP | mcp 2.3+ | rag-service Streamable HTTP (/mcp); agent calls via MCP client |
-| Vector retrieval | ChromaDB + sentence-transformers (BAAI/bge-m3) | Dense index, persisted at `data/chroma` |
+| Vector retrieval | Milvus (standalone: etcd + MinIO, built into compose) / ChromaDB (local development default) + sentence-transformers (BAAI/bge-m3) | Dense index; deployment connects to `http://milvus:19530`, local development persists at `data/chroma` |
 | Sparse retrieval | BM25IndexStore (self-built incremental inverted index) | Inverted index + Okapi BM25 scoring, incrementally maintained in O(terms), hybrid with vector retrieval; rank-bm25 kept only for consistency comparison & fallback path |
 | Business DB | SQLAlchemy 2 + PyMySQL (MySQL 8) | Audit logs / sync tasks / Agent tasks & events |
+| Cache / state | Redis 7 | agent checkpoint (redis required in production) + event bus |
 | Scheduling | APScheduler | HRSS sync cron (default 03:00 daily) |
 | Config | pydantic-settings / pydantic + PyYAML | Segmented prefixed config; invalid config blocks startup |
 | Logging | loguru | Colored console / file rotation (1 day / keep 7 days) |
 | Engineering | uv + ruff + pre-commit + pytest | Workspace deps, static checks, tests |
-| Deployment | Docker Compose | One-command orchestration of rag-service + agent-service |
+| Deployment | Docker Compose | One-command orchestration of MySQL + Redis + Milvus (etcd+MinIO+standalone) + both services |
 
 ## 🛠️ Technology Stack
 
